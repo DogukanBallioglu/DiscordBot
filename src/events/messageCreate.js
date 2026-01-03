@@ -41,7 +41,7 @@ module.exports = {
                             content: query,
                         },
                     ],
-                    model: "llama3-8b-8192",
+                    model: "llama-3.3-70b-versatile",
                 });
 
                 const response = chatCompletion.choices[0]?.message?.content || "Bir cevap oluşturulamadı.";
