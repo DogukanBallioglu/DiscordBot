@@ -1,12 +1,21 @@
 const { Events } = require('discord.js');
 const Groq = require('groq-sdk');
 
-const groq = new Groq({ apiKey: process.env.GROQ_API_KEY });
+let groq;
 
 module.exports = {
     name: 'messageCreate',
     async execute(message, client) {
         if (message.author.bot) return;
+
+        if (!process.env.GROQ_API_KEY) {
+            console.warn("GROQ_API_KEY eksik. Lütfen .env dosyanızı veya ortam değişkenlerinizi kontrol edin.");
+            return;
+        }
+
+        if (!groq) {
+            groq = new Groq({ apiKey: process.env.GROQ_API_KEY });
+        }
 
         // Bot etiketlendi mi kontrol et
         if (message.mentions.users.has(client.user.id)) {
