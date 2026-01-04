@@ -10,8 +10,9 @@ module.exports = {
         let i = 0;
         setInterval(() => {
             const activities = [
-                { name: `${client.guilds.cache.size} Sunucuya Hizmet`, type: ActivityType.Watching },
-                { name: 'Kaliteli Hizmet', type: ActivityType.Playing }
+                { name: `🏆 ${client.guilds.cache.size} Sunucuya Hizmet`, type: ActivityType.Watching },
+                { name: '✨ Kaliteli Hizmet', type: ActivityType.Playing },
+                { name: `🔥 Aktif ${client.guilds.cache.reduce((a, g) => a + g.memberCount, 0)} Kullanıcı`, type: ActivityType.Watching }
             ];
 
             if (i >= activities.length) i = 0;
