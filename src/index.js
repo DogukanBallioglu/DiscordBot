@@ -1,5 +1,6 @@
 const { Client, GatewayIntentBits, Collection } = require('discord.js');
 require('dotenv').config();
+require('./firebase');
 const fs = require('fs');
 
 const client = new Client({
