@@ -2,7 +2,7 @@ const { SlashCommandBuilder, EmbedBuilder, StringSelectMenuBuilder, StringSelect
 
 module.exports = {
     data: new SlashCommandBuilder()
-        .setName('kullanici-bilgi')
+        .setName('kullanıcı-bilgi')
         .setDescription('Kullanıcı hakkında bilgi verir.')
         .addUserOption(option =>
             option.setName('hedef')
