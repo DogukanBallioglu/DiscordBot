@@ -19,20 +19,13 @@ module.exports = (client) => {
         try {
             console.log('Slash komutları yükleniyor...');
 
-            // Eğer GUILD_ID varsa sadece o sunucuya, yoksa globale yükler
-            if (process.env.GUILD_ID) {
-                await rest.put(
-                    Routes.applicationGuildCommands(process.env.CLIENT_ID, process.env.GUILD_ID),
-                    { body: client.commandArray },
-                );
-                console.log('Komutlar sunucuya başarıyla yüklendi.');
-            } else {
-                await rest.put(
-                    Routes.applicationCommands(process.env.CLIENT_ID),
-                    { body: client.commandArray },
-                );
-                console.log('Komutlar globale başarıyla yüklendi.');
-            }
+            // Komutları Globale Yükle (Tüm sunucularda çalışır)
+            // Not: Global komutların tüm sunuculara yayılması 1 saati bulabilir (cache nedeniyle).
+            await rest.put(
+                Routes.applicationCommands(process.env.CLIENT_ID),
+                { body: client.commandArray },
+            );
+            console.log('Komutlar globale başarıyla yüklendi. (Not: Güncellemelerin görünmesi 1 saati bulabilir)');
         } catch (error) {
             console.error(error);
         }
