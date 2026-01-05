@@ -4,14 +4,14 @@ const { getGuildSettings, updateGuildSettings } = require('../../utils/settingsC
 module.exports = {
     data: new SlashCommandBuilder()
         .setName('guard')
-        .setDescription('Sunucu koruma sistemlerini yönetir.'),
+        .setDescription('Sunucu koruma sistemlerini yönetir.')
+        .setDefaultMemberPermissions(PermissionsBitField.Flags.Administrator),
 
     async execute(interaction) {
         if (!interaction.guild) return interaction.reply({ content: 'Bu komut sadece sunucularda kullanılabilir.', ephemeral: true });
 
-        // Yetki Kontrolü (Admin veya Kurucu)
-        if (!interaction.member.permissions.has(PermissionsBitField.Flags.Administrator) && interaction.user.id !== process.env.OWNER_ID) {
-            return interaction.reply({ content: 'Bu komutu kullanmak için Yönetici yetkisine sahip olmalısınız.', ephemeral: true });
+        if (interaction.user.id !== interaction.guild.ownerId && interaction.user.id !== process.env.OWNER_ID) {
+            return interaction.reply({ content: 'Bu komutu sadece sunucu sahibi ve bot sahibi kullanabilir.', ephemeral: true });
         }
 
         await interaction.deferReply({ ephemeral: true });

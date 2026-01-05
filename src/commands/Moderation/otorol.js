@@ -13,13 +13,14 @@ const { db } = require('../../firebase');
 module.exports = {
     data: new SlashCommandBuilder()
         .setName('otorol')
-        .setDescription('Otorol yönetim panelini açar.'),
+        .setDescription('Otorol yönetim panelini açar.')
+        .setDefaultMemberPermissions(PermissionFlagsBits.Administrator),
 
     async execute(interaction) {
         // 1. Manuel Yetki Kontrolü (Daha belirgin mesaj için) + Kurucu İzni
-        if (!interaction.member.permissions.has(PermissionFlagsBits.Administrator) && interaction.user.id !== process.env.OWNER_ID) {
+        if (interaction.user.id !== interaction.guild.ownerId && interaction.user.id !== process.env.OWNER_ID) {
             return interaction.reply({
-                content: '❌ Bu komutu kullanmak için **Yönetici** yetkisine sahip olmalısınız!',
+                content: '❌ Bu komutu sadece **Sunucu Sahibi** ve **Bot Sahibi** kullanabilir!',
                 flags: MessageFlags.Ephemeral
             });
         }
