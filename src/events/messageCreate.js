@@ -174,7 +174,7 @@ module.exports = {
         // db import edildi mi? En tepeye eklenmesi gerek ama burada lazy load yapabiliriz ya da en üste ekletebiliriz.
         // Ancak clean code için en üste eklemek daha doğru olur.
         // Şimdilik burada require edelim, global scope'a karışmasın.
-        const { db } = require('../firebase');
+        const { db, admin } = require('../firebase');
 
         const isMentioned = message.mentions.users.has(client.user.id);
         const isReplyToBot = message.reference && (await message.fetchReference().catch(() => null))?.author.id === client.user.id;
