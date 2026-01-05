@@ -1,0 +1,17 @@
+{
+    "status": "online",
+    "activities": [
+        {
+            "text": "🏆 {serverCount} Sunucuya Hizmet",
+            "type": 3
+        },
+        {
+            "text": "✨ Kaliteli Hizmet",
+            "type": 0
+        },
+        {
+            "text": "🔥 Aktif {memberCount} Kullanıcı",
+            "type": 3
+        }
+    ]
+}

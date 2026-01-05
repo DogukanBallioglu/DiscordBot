@@ -1,4 +1,6 @@
 const { ActivityType, Events } = require('discord.js');
+const fs = require('fs');
+const path = require('path');
 
 module.exports = {
     name: Events.ClientReady,
@@ -7,17 +9,42 @@ module.exports = {
         console.log(`${client.user.tag} olarak giriş yapıldı!`);
         await client.handleCommands();
 
-        let i = 0;
-        setInterval(() => {
-            const activities = [
-                { name: `🏆 ${client.guilds.cache.size} Sunucuya Hizmet`, type: ActivityType.Watching },
-                { name: '✨ Kaliteli Hizmet', type: ActivityType.Playing },
-                { name: `🔥 Aktif ${client.guilds.cache.reduce((a, g) => a + g.memberCount, 0)} Kullanıcı`, type: ActivityType.Watching }
-            ];
+        const statusFile = path.join(__dirname, '../data/statusConfig.json');
 
-            if (i >= activities.length) i = 0;
-            client.user.setActivity(activities[i]);
-            i++;
+        let i = 0;
+        // İlk açılışta hemen bir durum ayarla
+        updatePresence(client, i, statusFile);
+
+        setInterval(() => {
+            i = updatePresence(client, i, statusFile);
         }, 10000);
     },
 };
+
+function updatePresence(client, index, filePath) {
+    try {
+        if (!fs.existsSync(filePath)) return index;
+
+        const data = JSON.parse(fs.readFileSync(filePath, 'utf8'));
+        const { status, activities } = data;
+
+        if (!activities || activities.length === 0) return index;
+
+        if (index >= activities.length) index = 0;
+        const activityConfig = activities[index];
+
+        let text = activityConfig.text
+            .replace('{serverCount}', client.guilds.cache.size)
+            .replace('{memberCount}', client.guilds.cache.reduce((a, g) => a + g.memberCount, 0));
+
+        client.user.setPresence({
+            activities: [{ name: text, type: activityConfig.type }],
+            status: status || 'online'
+        });
+
+        return index + 1;
+    } catch (error) {
+        console.error('Status Error:', error);
+        return index;
+    }
+}
