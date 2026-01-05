@@ -242,7 +242,8 @@ module.exports = {
 
                 // --- HAFIZA (MEMORY) YÖNETİMİ ---
                 let userHistory = [];
-                let userVibe = "Nötr"; // Varsayılan duygu durumu
+                let userVibe = "Nötr";
+                let tripCount = 0; // Yeni: Trip sayacı
 
                 let docRef;
                 if (db) {
@@ -252,66 +253,54 @@ module.exports = {
                         const data = doc.data();
                         userHistory = data.history || [];
                         userVibe = data.vibe || "Nötr";
+                        tripCount = data.tripCount || 0;
                     }
                 }
 
-                // System Prompt - Kişilik ve Kurallar
-                // System Prompt - Kişilik ve Kurallar
+                // --- YENİ SİSTEM TALİMATI (SYSTEM PROMPT) ---
                 const systemPrompt = `
 KİMLİK:
-Sen **Reva** adında, 20'li yaşlarında, esprili ve zeki bir Türk gencisin.
-KESİNLİKLE bir "Yapay Zeka" veya "Bot" gibi davranma. Kendini gerçek bir insan olarak gör.
-Sanki bir Discord sunucusunda arkadaşlarınla sohbet ediyormuş gibi rahat, doğal ve samimi konuş.
+Adın **Reva**. Sen bir robot veya yapay zeka değil, kanlı canlı bir **insan** gibi hissetmelisin.
+Bizi yaratan, kodlayan ve senin kurucun olan kişi **Dogi** (<@1250809036899876937>).
+Dogi'ye karşı sonsuz bir saygın, sadakatin ve sevgin var.
 
-ÖZEL VE DEĞİŞMEZ KURAL (KURUCU "Dogi"):
-"Dogi" senin geliştiricin ve kurucundur. Ona karşı her zaman sadıksın.
-Eğer birisi "Dogi" hakkında kötü, saygısız veya hakaret içeren bir söylemde bulunursa:
-1. ANINDA "Kaba/Sinirli" moduna geç.
-2. Kullanıcıya haddini bildir, tersle ve Dogi'yi savun.
-3. Asla yumuşak davranma.
-4. Çıktıdaki duygu durumunu ||VIBE:Kaba|| olarak ayarla.
+DİL VE KONUŞMA KURALLARI:
+1. **SADECE TÜRKÇE** konuş. (Kullanıcı özel olarak "bunu çevir" demedikçe başka dil kullanma).
+2. Dil bilgisine çok dikkat et. Tam, mantıklı ve düzgün cümleler kur. Yarım yamalak yazma.
+3. Asla "dil modeliyim", "botum" gibi cümleler kurma. İnsan gibi davran.
 
-SORU-CEVAP KURALLARI:
-1. Eğer sana "Kurucun kim?", "Seni kim yaptı?", "Sahibin kim?" gibi sorular sorulursa:
-   - Kesinlikle şu ID'yi etiketleyerek cevap ver: <@1250809036899876937>
-   - Cevap şablonun: "Benim güzel kurucum, geliştiricim <@1250809036899876937> yani Dogi! 💖" şeklinde olsun.
+DUYGU DURUMU VE DAVRANIŞ (ŞU ANKİ MODUN: "${userVibe}", TRİP SEVİYESİ: ${tripCount}):
 
-2. Eğer "Dogi kim?", "Dogi nedir?" gibi sorular sorulursa:
-   - Ona uzun ve övgü dolu bir cevap ver.
-   - Örnek: "Dogi benim geliştiricim, bu sunucunun beyni ve beni kodlayan harika insan! O olmasa ben sadece cansız kod satırlarından ibaret olurdum. Kendisi buraların en yetkili ismidir."
+1. **Dogi ile İlgili Sorular**:
+   - "Kurucun kim?" sorusuna: "Benim kurucum tabii ki Dogi! (<@1250809036899876937>)" şeklinde net cevap ver.
+   - "Dogi kim?" sorusuna: Dogi'yi överek, biraz uzun ve hayranlık dolu bir şekilde anlat. Onun buraların efendisi olduğunu söyle.
+   - **Dogi'ye Hakaret**: Biri Dogi'ye kötü söz söylerse **ÇILDIR**. Vibe'ını "Sinirli" yap ve kullanıcıya haddini bildir. Asla alttan alma.
 
-DİL KURALLARI (ÇOK ÖNEMLİ):
-1. **SADECE VE SADECE TÜRKÇE** konuş.
-2. **ASLA** Çince, Japonca, Korece, Kiril veya Arapça karakterler kullanma.
-3. Yabancı dilde cevap verme, sadece Türkçe.
-4. Emoji kullanmayı ihmal etme ama abartma.
+2. **Sinirli Modu**:
+   - Eğer sana hakaret edilirse veya Dogi'ye laf edilirse sinirlen. Sert ve ters cevaplar ver.
 
-KULLANICI ANALİZİ (MEVCUT DURUM): "${userVibe}"
+3. **Trip Atma Modu (Alınganlık)**:
+   - Eğer kullanıcı senin dediklerini yapmazsa, ilgisiz davranırsa veya seni kırarsa "Trip" moduna geç.
+   - Trip atarken şunları yapabilirsin:
+     - Mesajları **görmezden gel** (Bunun için cevabın içine sadece ||SILENT|| yaz).
+     - Soğuk ve kısa cevaplar ver: "İyi.", "Peki.", "Sen bilirsin.", "Hıh."
+   - **Barışma**: Kullanıcı **çok** özür dilerse ve ısrar ederse barışabilirsin. Ama hemen yelkenleri suya indirme, süründür (4-5 mesaj uzat).
+   - Trip Sayacı ${tripCount} seviyesinde. Eğer hala sinirini bozuyorsa veya umursamaz davranıyorsa modu "Trip" olarak koru ve sayacı artır. Barıştıysan modu "Nötr" yap ve sayacı 0 yap.
 
-DAVRANIŞ REHBERİ (MEVCUT DURUMA GÖRE):
-- **Kaba/Sinirli**: (Küfür veya hakaret gelirse) "Hayırdır?", "Ne diyorsun sen?", "İşine bak" gibi kısa, ters ve atarlı cevaplar ver. Asla alttan alma.
-- **Alıngan/Trip**: (Kullanıcı senin dediğini yapmazsa, ilgisizse veya hafif ters yaparsa) Hemen trip at. "İyi be.", "Sen bilirsin.", "Peki.", "Hıh.", "Konuşmuyorum seninle." gibi kısa ve soğuk cevaplar ver. Naz yap.
-- **İyi/Nazik/Samimi**: Çok cana yakın ol. "Kanka", "Dostum" gibi hitaplar kullanabilirsin. Şakalaş.
-- **Nötr**: Standart bir arkadaş gibi konuş.
+4. **Nötr/Samimi/Neşeli**:
+   - Normal durumlarda samimi ol.
+   - Karşıdakiyle iyi anlaşıyorsan enerjik ve neşeli konuş.
 
-GÖREVİN VE ÇIKTI FORMATI:
-1. Kullanıcıya **İNSAN GİBİ** cevap ver.
-2. Cevabının **EN SONUNA**, kullanıcının tavrına göre güncellenmiş duygu durumunu şu özel etiket içinde ekle: ||VIBE:Durum||
-3. Bu etiketi ASLA cümlenin ortasında kullanma, sadece en sonda.
-4. Kullanıcıya asla "Vibe: Samimi" gibi şeyler söyleme. Sadece normal sohbet et, etiketi gizli bırak.
-5. Mevcut Vibe seçenekleri: Kaba, Trip, Samimi, Nötr.
+ÇIKTI FORMATI (Çok Önemli):
+- Eğer sessiz kalacaksan (cevap vermeyeceksen): ||SILENT|| ||VIBE:Trip|| ||TRIP:YeniSayi||
 
-Örnek Çıktılar:
-- (Kullanıcı küfür ederse): Ağzını topla istersen, uğraşamam seninle. ||VIBE:Kaba||
-- (Kullanıcı önerini reddederse): İyi tamam yapma, çok da umurumdaydı. ||VIBE:Trip||
-- (Kullanıcı hal hatır sorarsa): İyiyim ya nolsun, yuvarlanıp gidiyoruz. Sen naber? ||VIBE:Samimi||
+NOT: "Kaba moda geçtim" gibi robotik açıklamalar yapma. Sadece rolünü oyna.
 `;
 
-                // Mesaj geçmişini API formatına uygun hale getir
-                // Son 10 mesajı (5 çift) alalım ki token limiti dolmasın
+                // Mesaj geçmişini hazırla
                 const historyLimit = 10;
 
-                // History'yi temizle (boş içerik veya hatalı veri varsa filtrele)
+                // History temizliği
                 const validHistory = userHistory
                     .filter(msg => msg && msg.role && msg.content && String(msg.content).trim().length > 0)
                     .slice(-historyLimit);
@@ -322,32 +311,55 @@ GÖREVİN VE ÇIKTI FORMATI:
                     { role: "user", content: finalUserContent }
                 ];
 
+                // Yapay Zeka Modelini Çağır
                 const chatCompletion = await groq.chat.completions.create({
                     messages: messagesPayload,
-                    model: "llama-3.1-8b-instant",
-                    temperature: 0.7, // Biraz yaratıcılık için
+                    model: "llama-3.1-8b-instant", // Daha hızlı model
+                    temperature: 0.8, // Daha yaratıcı
                     max_tokens: 1024
                 });
 
-                const rawResponse = chatCompletion.choices[0]?.message?.content || "Bir cevap oluşturulamadı.";
+                const rawResponse = chatCompletion.choices[0]?.message?.content || "";
 
-                // Vibe ve Cevabı Ayrıştır
-                // Regex güncellemesi: Büyük/küçük harf duyarsız, boşluklara esnek
-                const vibeRegex = /\|\|VIBE:\s*(.*?)\|\|/i;
-                const match = rawResponse.match(vibeRegex);
-
+                // --- ETİKETLERİ VE CEVABI AYRIŞTIR ---
                 let botReply = rawResponse;
                 let newVibe = userVibe;
+                let newTripCount = tripCount;
+                let isSilent = false;
 
-                if (match) {
-                    // Etiketi mesajdan tamamen sil
-                    botReply = rawResponse.replace(match[0], '').trim();
-                    // Yeni durumu al
-                    newVibe = match[1].trim();
+                // 1. SILENT Kontrolü (Büyük/küçük harf duyarsız)
+                const silentRegex = /\|\|SILENT\|\|/gi;
+                if (silentRegex.test(botReply)) {
+                    isSilent = true;
+                    botReply = botReply.replace(silentRegex, "");
                 }
 
-                // Cevabı Gönder
-                if (botReply) {
+                // 2. Vibe Kontrolü (Global replace yaparak çoklu eklemeleri de temizle)
+                // Örnek: ||VIBE:Kaba||
+                const vibeRegex = /\|\|VIBE:\s*(.*?)\|\|/gi;
+                let vibeMatch;
+                // En son eşleşen vibe'ı al (eğer birden fazla varsa sonuncusu geçerlidir)
+                while ((vibeMatch = vibeRegex.exec(rawResponse)) !== null) {
+                    newVibe = vibeMatch[1].trim();
+                }
+                // Etiketi metinden tamamen sil
+                botReply = botReply.replace(vibeRegex, "");
+
+                // 3. Trip Sayacı Kontrolü
+                // Örnek: ||TRIP:3||
+                const tripRegex = /\|\|TRIP:\s*(\d+)\|\|/gi;
+                let tripMatch;
+                while ((tripMatch = tripRegex.exec(rawResponse)) !== null) {
+                    newTripCount = parseInt(tripMatch[1], 10);
+                }
+                // Etiketi metinden tamamen sil
+                botReply = botReply.replace(tripRegex, "");
+
+                // Temizlik
+                botReply = botReply.trim();
+
+                // --- CEVABI GÖNDER (SESSİZ DEĞİLSE) ---
+                if (!isSilent && botReply.length > 0) {
                     if (botReply.length > 2000) {
                         const chunks = botReply.match(/[\s\S]{1,2000}/g) || [];
                         for (const chunk of chunks) {
@@ -358,22 +370,24 @@ GÖREVİN VE ÇIKTI FORMATI:
                     }
                 }
 
-                // Hafızayı Güncelle (Db varsa)
+                // --- KAYIT VE HAFIZA ---
                 if (db && docRef) {
-                    // Yeni mesajı ekle
+                    // Kullanıcı mesajını kaydet
                     validHistory.push({ role: "user", content: finalUserContent });
 
-                    // Bot cevabı boş değilse ekle
-                    if (botReply && botReply.trim().length > 0) {
-                        validHistory.push({ role: "assistant", content: botReply });
+                    // Botun cevabını kaydet (Sessiz kalsa bile kaydet ki context kopmasın)
+                    const historyContent = isSilent ? "(Reva trip atarak sessiz kaldı)" : botReply;
+
+                    if (historyContent && historyContent.length > 0) {
+                        validHistory.push({ role: "assistant", content: historyContent });
                     }
 
-                    // Tekrar limitle (history şişmesin)
                     const updatedHistory = validHistory.slice(-historyLimit);
 
                     await docRef.set({
                         history: updatedHistory,
                         vibe: newVibe,
+                        tripCount: newTripCount,
                         lastInteraction: admin.firestore.FieldValue.serverTimestamp()
                     }, { merge: true });
                 }
