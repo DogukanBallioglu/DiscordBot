@@ -18,9 +18,9 @@ module.exports = {
 
     async execute(interaction) {
         // 1. Manuel Yetki Kontrolü (Daha belirgin mesaj için) + Kurucu İzni
-        if (interaction.user.id !== interaction.guild.ownerId && interaction.user.id !== process.env.OWNER_ID) {
+        if (!interaction.member.permissions.has(PermissionFlagsBits.Administrator) && interaction.user.id !== process.env.OWNER_ID) {
             return interaction.reply({
-                content: '❌ Bu komutu sadece **Sunucu Sahibi** ve **Bot Sahibi** kullanabilir!',
+                content: '❌ Bu komutu sadece **Yönetici** yetkisine sahip kullanıcılar ve **Bot Sahibi** kullanabilir!',
                 flags: MessageFlags.Ephemeral
             });
         }

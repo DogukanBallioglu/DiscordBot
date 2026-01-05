@@ -1,4 +1,4 @@
-const { SlashCommandBuilder, PermissionsBitField, EmbedBuilder } = require('discord.js');
+const { SlashCommandBuilder, PermissionsBitField, EmbedBuilder, MessageFlags } = require('discord.js');
 const { updateUserRank } = require('../../utils/rankUtils');
 
 module.exports = {
@@ -31,11 +31,11 @@ module.exports = {
         if (!interaction.guild) return;
 
         // Yetki Kontrolü (Sunucu Sahibi veya Bot Sahibi)
-        if (interaction.user.id !== interaction.guild.ownerId && interaction.user.id !== process.env.OWNER_ID) {
-            return interaction.reply({ content: 'Bu komutu sadece sunucu sahibi ve bot sahibi kullanabilir.', ephemeral: true });
+        if (!interaction.member.permissions.has(PermissionsBitField.Flags.Administrator) && interaction.user.id !== process.env.OWNER_ID) {
+            return interaction.reply({ content: 'Bu komutu sadece yönetici yetkisine sahip kullanıcılar ve bot sahibi kullanabilir.', flags: MessageFlags.Ephemeral });
         }
 
-        await interaction.deferReply({ ephemeral: true });
+        await interaction.deferReply({ flags: MessageFlags.Ephemeral });
 
         const islem = interaction.options.getString('işlem');
         const target = interaction.options.getUser('üye');

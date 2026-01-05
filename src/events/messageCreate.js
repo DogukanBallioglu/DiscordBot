@@ -25,15 +25,17 @@ module.exports = {
             const settings = await getGuildSettings(message.guild.id);
 
             // Yönetici yetkisi veya Kurucu ise KORUMA kontrollerini atla
-            if (!message.member.permissions.has(PermissionsBitField.Flags.Administrator) && message.author.id !== process.env.OWNER_ID) {
+            if (!message.member.permissions.has(PermissionsBitField.Flags.Administrator)) { //&& message.author.id !== process.env.OWNER_ID) {
 
                 const guard = settings?.guard;
 
                 if (guard) {
                     // Helper: Ayarları Normalize Et
                     const normalize = (val) => {
-                        if (typeof val === 'boolean') return { enabled: val, exemptRoles: [] };
-                        if (!val) return { enabled: false, exemptRoles: [] };
+                        if (typeof val === 'boolean') return { enabled: val, exemptRoles: [], exemptChannels: [], warningEnabled: true };
+                        if (!val) return { enabled: false, exemptRoles: [], exemptChannels: [], warningEnabled: true };
+                        if (!val.exemptChannels) val.exemptChannels = [];
+                        if (val.warningEnabled === undefined) val.warningEnabled = true;
                         return val;
                     };
 
@@ -42,12 +44,20 @@ module.exports = {
                     const adsConfig = normalize(guard.ads);
                     const spamConfig = normalize(guard.spam);
 
-                    // Helper: Rol Kontrolü (Muaf mı?)
+                    // Helper: Rol ve Kanal Kontrolü (Muaf mı?)
                     const isExempt = (config) => {
-                        if (!config.enabled) return true; // Kapalıysa "muaf" sayılır (kontrol edilmez)
+                        if (!config.enabled) return true; // Kapalıysa "muaf" sayılır
+
+                        // Rol Kontrolü
                         if (config.exemptRoles && config.exemptRoles.length > 0) {
-                            return message.member.roles.cache.hasAny(...config.exemptRoles);
+                            if (message.member.roles.cache.hasAny(...config.exemptRoles)) return true;
                         }
+
+                        // Kanal Kontrolü
+                        if (config.exemptChannels && config.exemptChannels.includes(message.channel.id)) {
+                            return true;
+                        }
+
                         return false;
                     };
 
@@ -68,12 +78,18 @@ module.exports = {
 
                     // 1. Küfür Koruması
                     if (badWordsConfig.enabled && !isExempt(badWordsConfig)) {
+                        // "?" kaldırıldı, yanlış pozitifleri önlemek için Regex sınırları (boundary) eklendi.
                         const badWords = ["mk", "amk", "aq", "orospu", "piç", "yavşak", "sik", "yarrak", "oç"];
                         const contentLower = message.content.toLowerCase();
-                        if (badWords.some(word => contentLower.includes(word))) {
+
+                        // Kelimeyi "içeren" değil, kelime "başlangıçı" uyanları bul.
+                        // Örn: "eksik" ("sik" içerir ama başında boşluk yok) -> EŞLEŞMEZ (Güvenli)
+                        // "siktir" ("sik" ile başlar) -> EŞLEŞİR (Yakalar)
+                        // " koç " ("oç" içerir ama başında k var) -> EŞLEŞMEZ (Güvenli)
+                        if (badWords.some(word => new RegExp(`(^|\\s)${word}`, 'i').test(contentLower))) {
                             try {
                                 if (message.deletable) await message.delete();
-                                await sendWarning("bu sunucuda küfür yasaktır! 🤬");
+                                if (badWordsConfig.warningEnabled !== false) await sendWarning("bu sunucuda küfür yasaktır! 🤬");
                                 return;
                             } catch (err) { }
                         }
@@ -81,23 +97,33 @@ module.exports = {
 
                     // 2. Link Koruması
                     if (linksConfig.enabled && !isExempt(linksConfig)) {
-                        const linkRegex = /(https?:\/\/[^\s]+)/g;
-                        if (linkRegex.test(message.content)) {
-                            try {
-                                if (message.deletable) await message.delete();
-                                await sendWarning("bu sunucuda link paylaşmak yasaktır! 🔗");
-                                return;
-                            } catch (err) { }
+                        const linkRegex = /((https?:\/\/[^\s]+)|(www\.[^\s]+))/gi;
+                        const links = message.content.match(linkRegex);
+
+                        if (links) {
+                            // İzin verilen GIF ve Resim domainleri
+                            const allowedDomains = ["tenor.com", "giphy.com", "imgur.com", "media.discordapp.net", "cdn.discordapp.com", "discord.com", "discordapp.com"];
+
+                            // Linklerden HERHANGİ BİRİ izin verilenler listesinde DEĞİLSE yasakla
+                            const isBannedLink = links.some(link => !allowedDomains.some(domain => link.toLowerCase().includes(domain)));
+
+                            if (isBannedLink) {
+                                try {
+                                    if (message.deletable) await message.delete();
+                                    if (linksConfig.warningEnabled !== false) await sendWarning("bu sunucuda link paylaşmak yasaktır! (Sadece GIF/Resim serbest) 🔗");
+                                    return;
+                                } catch (err) { }
+                            }
                         }
                     }
 
                     // 3. Reklam Koruması
                     if (adsConfig.enabled && !isExempt(adsConfig)) {
-                        const adRegex = /(discord.gg\/|discordapp.com\/invite\/)/g;
+                        const adRegex = /(discord\.gg\/|discord\.com\/invite\/|discordapp\.com\/invite\/)/gi;
                         if (adRegex.test(message.content)) {
                             try {
                                 if (message.deletable) await message.delete();
-                                await sendWarning("bu sunucuda reklam yapmak yasaktır! 📢");
+                                if (adsConfig.warningEnabled !== false) await sendWarning("bu sunucuda reklam yapmak yasaktır! 📢");
                                 return;
                             } catch (err) { }
                         }
@@ -119,7 +145,7 @@ module.exports = {
                                 if (userData.count >= LIMIT) {
                                     try {
                                         if (message.deletable) await message.delete();
-                                        if (userData.count === LIMIT) {
+                                        if (userData.count === LIMIT && spamConfig.warningEnabled !== false) {
                                             await sendWarning("çok hızlı mesaj gönderiyorsun! Spam yapma! 🔇");
                                         }
                                         return;

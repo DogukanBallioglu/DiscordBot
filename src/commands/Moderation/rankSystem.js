@@ -12,7 +12,8 @@ const {
     TextInputStyle,
     PermissionsBitField,
     ComponentType,
-    ChannelType
+    ChannelType,
+    MessageFlags
 } = require('discord.js');
 const { getGuildSettings, updateGuildSettings } = require('../../utils/settingsCache');
 
@@ -27,11 +28,11 @@ module.exports = {
 
         // Yetki Kontrolü (Admin veya Kurucu)
         // Yetki Kontrolü (Sunucu Sahibi veya Bot Sahibi)
-        if (interaction.user.id !== interaction.guild.ownerId && interaction.user.id !== process.env.OWNER_ID) {
-            return interaction.reply({ content: 'Bu komutu sadece sunucu sahibi ve bot sahibi kullanabilir.', ephemeral: true });
+        if (!interaction.member.permissions.has(PermissionsBitField.Flags.Administrator) && interaction.user.id !== process.env.OWNER_ID) {
+            return interaction.reply({ content: 'Bu komutu sadece yönetici yetkisine sahip kullanıcılar ve bot sahibi kullanabilir.', flags: MessageFlags.Ephemeral });
         }
 
-        await interaction.deferReply({ ephemeral: true });
+        await interaction.deferReply({ flags: MessageFlags.Ephemeral });
 
         // Ayarları Çek
         let settings = await getGuildSettings(interaction.guild.id);
@@ -149,7 +150,7 @@ module.exports = {
         collector.on('collect', async (i) => {
             // Sadece komutu kullanan yönetebilir
             if (i.user.id !== interaction.user.id) {
-                return i.reply({ content: 'Bu menüyü sadece komutu çalıştıran yönetici kullanabilir.', ephemeral: true });
+                return i.reply({ content: 'Bu menüyü sadece komutu çalıştıran yönetici kullanabilir.', flags: MessageFlags.Ephemeral });
             }
 
             const id = i.customId;
@@ -214,7 +215,7 @@ module.exports = {
                     const cd = parseInt(submitted.fields.getTextInputValue('cooldown'));
 
                     if (isNaN(min) || isNaN(max) || isNaN(cd)) {
-                        await submitted.reply({ content: 'Lütfen geçerli sayılar girin!', ephemeral: true });
+                        await submitted.reply({ content: 'Lütfen geçerli sayılar girin!', flags: MessageFlags.Ephemeral });
                         return;
                     }
 
@@ -269,7 +270,7 @@ module.exports = {
 
                     const level = parseInt(submitted.fields.getTextInputValue('reward_level'));
                     if (isNaN(level) || level < 1) {
-                        await submitted.reply({ content: 'Geçersiz level!', ephemeral: true });
+                        await submitted.reply({ content: 'Geçersiz level!', flags: MessageFlags.Ephemeral });
                         return;
                     }
 
@@ -286,7 +287,7 @@ module.exports = {
                     const roleMsg = await submitted.reply({
                         content: `**Level ${level}** için verilecek rolü seçin:`,
                         components: [roleSelectRow],
-                        ephemeral: true,
+                        flags: MessageFlags.Ephemeral,
                         fetchReply: true
                     });
 

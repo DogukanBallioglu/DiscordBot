@@ -1,3 +1,5 @@
+const { Events, MessageFlags } = require('discord.js');
+
 module.exports = {
     name: 'interactionCreate',
     async execute(interaction, client) {
@@ -18,7 +20,7 @@ module.exports = {
                 if (status[interaction.commandName] === false && interaction.user.id !== process.env.OWNER_ID) {
                     return interaction.reply({
                         content: '⛔ Bu komut şu anda kurucu tarafından kapatılmıştır ve kullanılamaz.',
-                        ephemeral: true
+                        flags: MessageFlags.Ephemeral
                     });
                 }
             }
@@ -30,10 +32,16 @@ module.exports = {
             await command.execute(interaction, client);
         } catch (error) {
             console.error(error);
-            await interaction.reply({
+            const errorMessage = {
                 content: 'Bu komutu çalıştırırken bir hata oluştu!',
-                ephemeral: true
-            });
+                flags: MessageFlags.Ephemeral
+            };
+
+            if (interaction.replied || interaction.deferred) {
+                await interaction.followUp(errorMessage).catch(console.error);
+            } else {
+                await interaction.reply(errorMessage).catch(console.error);
+            }
         }
     },
 };

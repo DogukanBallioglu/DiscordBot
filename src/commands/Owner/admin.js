@@ -1,6 +1,7 @@
-const { SlashCommandBuilder, ActionRowBuilder, StringSelectMenuBuilder, ButtonBuilder, ButtonStyle, EmbedBuilder, ModalBuilder, TextInputBuilder, TextInputStyle, ComponentType, PermissionFlagsBits, ActivityType } = require('discord.js');
+const { SlashCommandBuilder, ActionRowBuilder, StringSelectMenuBuilder, ButtonBuilder, ButtonStyle, EmbedBuilder, ModalBuilder, TextInputBuilder, TextInputStyle, ComponentType, PermissionFlagsBits, ActivityType, MessageFlags } = require('discord.js');
 const fs = require('fs');
 const path = require('path');
+const { db } = require('../../firebase');
 
 // Dosya yolları
 const commandStatusFile = path.join(__dirname, '../../data/commandStatus.json');
@@ -40,11 +41,11 @@ const ActivityTypeReverseMap = {
 module.exports = {
     data: new SlashCommandBuilder()
         .setName('bot-yönetim')
-        .setDescription('Bot yönetim paneli (Sadece Kurucu)')
-        .setDefaultMemberPermissions(PermissionFlagsBits.Administrator),
+        .setDescription('Bot yönetim paneli (Sadece Kurucu)'),
+
     async execute(interaction) {
         try {
-            await interaction.deferReply({ ephemeral: true });
+            await interaction.deferReply({ flags: MessageFlags.Ephemeral });
 
             if (interaction.user.id !== process.env.OWNER_ID) {
                 return interaction.editReply({ content: 'Bu komutu kullanmak için yetkiniz yok.' });
@@ -71,7 +72,8 @@ module.exports = {
                             .addOptions([
                                 { label: 'Profil Ayarları', value: 'profile_settings', emoji: '🖼️' },
                                 { label: 'Komut Ayarları', value: 'command_settings', emoji: '⚙️' },
-                                { label: 'Durum Yönetimi', value: 'status_settings', emoji: '🟢' }
+                                { label: 'Durum Yönetimi', value: 'status_settings', emoji: '🟢' },
+                                { label: 'Sunucu Yönetimi', value: 'server_settings', emoji: '🖥️' }
                             ])
                     );
                 return { embeds: [embed], components: [row] };
@@ -106,7 +108,7 @@ module.exports = {
                 return { embeds: [embed], components: [menu, back] };
             };
 
-            // 4. Status Settings (UPDATED)
+            // 4. Status Settings
             const getStatusSettings = () => {
                 const config = loadJSON(statusConfigFile);
                 const currentStatus = config.status || 'online';
@@ -134,7 +136,7 @@ module.exports = {
                         ])
                 );
 
-                // Row 2: Edit/Delete Activity Menu (Instead of pure delete)
+                // Row 2: Edit/Delete Activity Menu
                 let editRow = null;
                 if (activities.length > 0) {
                     const options = activities.map((a, i) => ({
@@ -205,16 +207,78 @@ module.exports = {
                 return { embeds: [embed], components: [btnRow1, typeRow, btnRow2] };
             };
 
+            // 6. Server Management Menu
+            const getServerManagementMenu = () => {
+                const guilds = interaction.client.guilds.cache.map(g => ({ label: g.name.substring(0, 100), value: g.id, description: `${g.memberCount} üye` })).slice(0, 25);
+
+                const embed = new EmbedBuilder()
+                    .setTitle('🖥️ Sunucu Yönetimi')
+                    .setDescription(`Bot şu an **${interaction.client.guilds.cache.size}** sunucuda bulunuyor.\nİşlem yapmak istediğiniz sunucuyu seçin.`)
+                    .setColor('Purple');
+
+                const menu = new ActionRowBuilder().addComponents(
+                    new StringSelectMenuBuilder()
+                        .setCustomId('select_server_action')
+                        .setPlaceholder('Sunucu Seç...')
+                        .addOptions(guilds)
+                );
+
+                const back = new ActionRowBuilder().addComponents(
+                    new ButtonBuilder().setCustomId('back_to_main').setLabel('Ana Menüye Dön').setStyle(ButtonStyle.Secondary).setEmoji('⬅️')
+                );
+
+                return { embeds: [embed], components: [menu, back] };
+            };
+
+            // 7. Server Detail View
+            const getServerDetailView = async (guildId) => {
+                const guild = interaction.client.guilds.cache.get(guildId);
+                if (!guild) return { content: 'Sunucu bulunamadı (Bot ayrılmış olabilir).', components: [new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId('back_to_servers').setLabel('Geri Dön').setStyle(ButtonStyle.Secondary))] };
+
+                await guild.fetch();
+                const owner = await interaction.client.users.fetch(guild.ownerId).catch(() => null);
+
+                // Check Database Data Existence
+                const docGuild = await db.collection('guilds').doc(guildId).get();
+                const docSettings = await db.collection('guildSettings').doc(guildId).get();
+                const hasData = docGuild.exists || docSettings.exists;
+
+                const embed = new EmbedBuilder()
+                    .setTitle(`🔎 Sunucu Detayı: ${guild.name}`)
+                    .setThumbnail(guild.iconURL())
+                    .setColor('DarkVividPink')
+                    .addFields(
+                        { name: 'ID', value: guild.id, inline: true },
+                        { name: 'Üye Sayısı', value: `${guild.memberCount}`, inline: true },
+                        { name: 'Sahibi', value: owner ? `${owner.tag} (${owner.id})` : 'Bilinmiyor', inline: true },
+                        { name: 'Oluşturulma', value: `<t:${Math.floor(guild.createdTimestamp / 1000)}:R>`, inline: true },
+                        { name: 'Bot Katılma', value: `<t:${Math.floor(guild.joinedTimestamp / 1000)}:R>`, inline: true },
+                        { name: 'Veritabanı Durumu', value: hasData ? '✅ Veri Var' : '❌ Veri Yok', inline: true }
+                    );
+
+                const row = new ActionRowBuilder().addComponents(
+                    new ButtonBuilder().setCustomId(`btn_leave_server_${guild.id}`).setLabel('Sunucudan Çık').setStyle(ButtonStyle.Danger).setEmoji('🚪'),
+                    new ButtonBuilder()
+                        .setCustomId(`btn_delete_data_${guild.id}`)
+                        .setLabel(hasData ? 'Verileri Sil (DB)' : 'Veri Bulunamadı')
+                        .setStyle(ButtonStyle.Danger)
+                        .setEmoji('🗑️')
+                        .setDisabled(!hasData),
+                    new ButtonBuilder().setCustomId('back_to_servers').setLabel('Geri Dön').setStyle(ButtonStyle.Secondary).setEmoji('⬅️')
+                );
+
+                return { embeds: [embed], components: [row] };
+            };
 
             const reply = await interaction.editReply({ ...getMainMenu() });
 
-            const collector = reply.createMessageComponentCollector({ time: 10 * 60 * 1000 }); // 10 mins
+            const collector = reply.createMessageComponentCollector({ time: 300000 }); // 5 mins
 
             let currentCategory = null;
 
             collector.on('collect', async i => {
                 // General Validations
-                if (i.user.id !== interaction.user.id) return i.reply({ content: 'Sadece komutu kullanan kişi işlem yapabilir.', ephemeral: true });
+                if (i.user.id !== interaction.user.id) return i.reply({ content: 'Sadece komutu kullanan kişi işlem yapabilir.', flags: MessageFlags.Ephemeral });
 
                 // --- Navigation & Main Menus ---
                 if (i.customId === 'back_to_main') {
@@ -223,11 +287,15 @@ module.exports = {
                 else if (i.customId === 'back_to_status') {
                     await i.update(getStatusSettings());
                 }
+                else if (i.customId === 'back_to_servers') {
+                    await i.update(getServerManagementMenu());
+                }
                 else if (i.customId === 'main_menu_select') {
                     const v = i.values[0];
                     if (v === 'profile_settings') await i.update(getProfileSettings());
                     if (v === 'command_settings') await i.update(getCommandSettings());
                     if (v === 'status_settings') await i.update(getStatusSettings());
+                    if (v === 'server_settings') await i.update(getServerManagementMenu());
                 }
 
                 // --- Profile Settings ---
@@ -256,6 +324,58 @@ module.exports = {
                 }
                 else if (i.customId === 'select_command') {
                     await toggleCommandStatus(i, i.values[0]);
+                }
+
+                // --- Server Management ---
+                else if (i.customId === 'select_server_action') {
+                    const guildId = i.values[0];
+                    const view = await getServerDetailView(guildId);
+                    await i.update(view);
+                }
+                else if (i.customId.startsWith('btn_leave_server_')) {
+                    const guildId = i.customId.split('_')[3];
+                    const guild = interaction.client.guilds.cache.get(guildId);
+
+                    if (guild) {
+                        try {
+                            await guild.leave();
+                            await i.reply({ content: `Bot **${guild.name}** sunucusundan başarıyla ayrıldı.`, flags: MessageFlags.Ephemeral });
+
+                            // UI clean up / update
+                            try {
+                                await i.message.edit(getServerManagementMenu());
+                            } catch (uiError) {
+                                // Msg might be deleted or not editable
+                                console.error('UI update error:', uiError);
+                            }
+
+                        } catch (e) {
+                            if (!i.replied && !i.deferred) {
+                                await i.reply({ content: `Hata: ${e.message}`, flags: MessageFlags.Ephemeral });
+                            } else {
+                                await i.followUp({ content: `Hata: ${e.message}`, flags: MessageFlags.Ephemeral });
+                            }
+                        }
+                    } else {
+                        await i.reply({ content: 'Sunucu zaten bulunamıyor.', flags: MessageFlags.Ephemeral });
+                    }
+                }
+                else if (i.customId.startsWith('btn_delete_data_')) {
+                    const guildId = i.customId.split('_')[3];
+                    try {
+                        // Delete from 'guilds' collection
+                        await db.collection('guilds').doc(guildId).delete();
+                        // Delete from 'guildSettings' collection
+                        await db.collection('guildSettings').doc(guildId).delete();
+
+                        await i.reply({ content: `Sunucu verileri (ID: ${guildId}) tüm koleksiyonlardan (guilds, guildSettings) başarıyla silindi.`, flags: MessageFlags.Ephemeral });
+                    } catch (e) {
+                        if (!i.replied && !i.deferred) {
+                            await i.reply({ content: `Hata: ${e.message}`, flags: MessageFlags.Ephemeral });
+                        } else {
+                            await i.followUp({ content: `Hata: ${e.message}`, flags: MessageFlags.Ephemeral });
+                        }
+                    }
                 }
 
                 // --- Status: Main View ---
@@ -320,7 +440,7 @@ module.exports = {
                         config.activities.splice(index, 1);
                         saveJSON(statusConfigFile, config);
                     }
-                    await i.update(getStatusSettings()); // Go back to list
+                    await i.update(getStatusSettings());
                 }
             });
 
@@ -333,24 +453,22 @@ module.exports = {
                     if (modalI.customId === 'modal_avatar') {
                         const url = modalI.fields.getTextInputValue('url_input');
                         await interaction.client.user.setAvatar(url);
-                        await modalI.reply({ content: 'Avatar güncellendi!', ephemeral: true });
+                        await modalI.reply({ content: 'Avatar güncellendi!', flags: MessageFlags.Ephemeral });
                     }
                     else if (modalI.customId === 'modal_banner') {
                         const url = modalI.fields.getTextInputValue('url_input');
                         await interaction.client.user.setBanner(url);
-                        await modalI.reply({ content: 'Banner güncellendi!', ephemeral: true });
+                        await modalI.reply({ content: 'Banner güncellendi!', flags: MessageFlags.Ephemeral });
                     }
                     else if (modalI.customId === 'modal_add_activity_simple') {
                         const text = modalI.fields.getTextInputValue('activity_text');
                         const config = loadJSON(statusConfigFile);
                         if (!config.activities) config.activities = [];
-
-                        // Add with DEFAULT type (0 = Playing) as requested
                         config.activities.push({ text: text, type: 0 });
                         saveJSON(statusConfigFile, config);
 
-                        await modalI.deferUpdate(); // Close modal nicely
-                        await interaction.editReply(getStatusSettings()); // Update main message
+                        await modalI.deferUpdate();
+                        await interaction.editReply(getStatusSettings());
                     }
                     else if (modalI.customId.startsWith('modal_edit_activity_')) {
                         const index = parseInt(modalI.customId.split('_')[3]);
@@ -368,7 +486,7 @@ module.exports = {
                 } catch (error) {
                     console.error('Modal Action Error:', error);
                     if (!modalI.replied && !modalI.deferred) {
-                        await modalI.reply({ content: `Hata oluştu: ${error.message}`, ephemeral: true });
+                        await modalI.reply({ content: `Hata oluştu: ${error.message}`, flags: MessageFlags.Ephemeral });
                     }
                 }
             };
@@ -382,7 +500,7 @@ module.exports = {
                 const commandFiles = fs.readdirSync(categoryPath).filter(file => file.endsWith('.js'));
                 const status = loadJSON(commandStatusFile);
 
-                if (commandFiles.length === 0) return i.reply({ content: 'Komut yok.', ephemeral: true });
+                if (commandFiles.length === 0) return i.reply({ content: 'Komut yok.', flags: MessageFlags.Ephemeral });
 
                 const options = commandFiles.map(file => {
                     const cmdData = require(path.join(categoryPath, file));
