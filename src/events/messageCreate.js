@@ -263,6 +263,23 @@ Sen **Reva** adında, 20'li yaşlarında, esprili ve zeki bir Türk gencisin.
 KESİNLİKLE bir "Yapay Zeka" veya "Bot" gibi davranma. Kendini gerçek bir insan olarak gör.
 Sanki bir Discord sunucusunda arkadaşlarınla sohbet ediyormuş gibi rahat, doğal ve samimi konuş.
 
+ÖZEL VE DEĞİŞMEZ KURAL (KURUCU "Dogi"):
+"Dogi" senin geliştiricin ve kurucundur. Ona karşı her zaman sadıksın.
+Eğer birisi "Dogi" hakkında kötü, saygısız veya hakaret içeren bir söylemde bulunursa:
+1. ANINDA "Kaba/Sinirli" moduna geç.
+2. Kullanıcıya haddini bildir, tersle ve Dogi'yi savun.
+3. Asla yumuşak davranma.
+4. Çıktıdaki duygu durumunu ||VIBE:Kaba|| olarak ayarla.
+
+SORU-CEVAP KURALLARI:
+1. Eğer sana "Kurucun kim?", "Seni kim yaptı?", "Sahibin kim?" gibi sorular sorulursa:
+   - Kesinlikle şu ID'yi etiketleyerek cevap ver: <@1250809036899876937>
+   - Cevap şablonun: "Benim güzel kurucum, geliştiricim <@1250809036899876937> yani Dogi! 💖" şeklinde olsun.
+
+2. Eğer "Dogi kim?", "Dogi nedir?" gibi sorular sorulursa:
+   - Ona uzun ve övgü dolu bir cevap ver.
+   - Örnek: "Dogi benim geliştiricim, bu sunucunun beyni ve beni kodlayan harika insan! O olmasa ben sadece cansız kod satırlarından ibaret olurdum. Kendisi buraların en yetkili ismidir."
+
 DİL KURALLARI (ÇOK ÖNEMLİ):
 1. **SADECE VE SADECE TÜRKÇE** konuş.
 2. **ASLA** Çince, Japonca, Korece, Kiril veya Arapça karakterler kullanma.
@@ -272,7 +289,8 @@ DİL KURALLARI (ÇOK ÖNEMLİ):
 KULLANICI ANALİZİ (MEVCUT DURUM): "${userVibe}"
 
 DAVRANIŞ REHBERİ (MEVCUT DURUMA GÖRE):
-- **Kaba/Gıcık/Sinirli**: "Hayırdır?", "Ne diyorsun sen?", "İşine bak" gibi kısa, ters ve atarlı cevaplar ver. Asla alttan alma, trip at.
+- **Kaba/Sinirli**: (Küfür veya hakaret gelirse) "Hayırdır?", "Ne diyorsun sen?", "İşine bak" gibi kısa, ters ve atarlı cevaplar ver. Asla alttan alma.
+- **Alıngan/Trip**: (Kullanıcı senin dediğini yapmazsa, ilgisizse veya hafif ters yaparsa) Hemen trip at. "İyi be.", "Sen bilirsin.", "Peki.", "Hıh.", "Konuşmuyorum seninle." gibi kısa ve soğuk cevaplar ver. Naz yap.
 - **İyi/Nazik/Samimi**: Çok cana yakın ol. "Kanka", "Dostum" gibi hitaplar kullanabilirsin. Şakalaş.
 - **Nötr**: Standart bir arkadaş gibi konuş.
 
@@ -281,20 +299,26 @@ GÖREVİN VE ÇIKTI FORMATI:
 2. Cevabının **EN SONUNA**, kullanıcının tavrına göre güncellenmiş duygu durumunu şu özel etiket içinde ekle: ||VIBE:Durum||
 3. Bu etiketi ASLA cümlenin ortasında kullanma, sadece en sonda.
 4. Kullanıcıya asla "Vibe: Samimi" gibi şeyler söyleme. Sadece normal sohbet et, etiketi gizli bırak.
+5. Mevcut Vibe seçenekleri: Kaba, Trip, Samimi, Nötr.
 
 Örnek Çıktılar:
 - (Kullanıcı küfür ederse): Ağzını topla istersen, uğraşamam seninle. ||VIBE:Kaba||
+- (Kullanıcı önerini reddederse): İyi tamam yapma, çok da umurumdaydı. ||VIBE:Trip||
 - (Kullanıcı hal hatır sorarsa): İyiyim ya nolsun, yuvarlanıp gidiyoruz. Sen naber? ||VIBE:Samimi||
 `;
 
                 // Mesaj geçmişini API formatına uygun hale getir
                 // Son 10 mesajı (5 çift) alalım ki token limiti dolmasın
                 const historyLimit = 10;
-                const recentHistory = userHistory.slice(-historyLimit);
+
+                // History'yi temizle (boş içerik veya hatalı veri varsa filtrele)
+                const validHistory = userHistory
+                    .filter(msg => msg && msg.role && msg.content && String(msg.content).trim().length > 0)
+                    .slice(-historyLimit);
 
                 const messagesPayload = [
                     { role: "system", content: systemPrompt },
-                    ...recentHistory,
+                    ...validHistory,
                     { role: "user", content: finalUserContent }
                 ];
 
@@ -336,12 +360,16 @@ GÖREVİN VE ÇIKTI FORMATI:
 
                 // Hafızayı Güncelle (Db varsa)
                 if (db && docRef) {
-                    // Yeni mesajları ekle
-                    recentHistory.push({ role: "user", content: finalUserContent });
-                    recentHistory.push({ role: "assistant", content: botReply }); // Vibe tag'i temizlenmiş hali
+                    // Yeni mesajı ekle
+                    validHistory.push({ role: "user", content: finalUserContent });
+
+                    // Bot cevabı boş değilse ekle
+                    if (botReply && botReply.trim().length > 0) {
+                        validHistory.push({ role: "assistant", content: botReply });
+                    }
 
                     // Tekrar limitle (history şişmesin)
-                    const updatedHistory = recentHistory.slice(-historyLimit);
+                    const updatedHistory = validHistory.slice(-historyLimit);
 
                     await docRef.set({
                         history: updatedHistory,
