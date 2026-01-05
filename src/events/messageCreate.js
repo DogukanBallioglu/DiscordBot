@@ -165,23 +165,29 @@ module.exports = {
             }
         }
 
-        // --- AI (YAPAY ZEKA) İŞLEMLERİ ---
+        // --- AI (YAPAY ZEKAI) İŞLEMLERİ ---
 
         if (!groq) {
             groq = new Groq({ apiKey: process.env.GROQ_API_KEY });
         }
 
-        // Bot etiketlendi mi veya yanıt verildi mi (yanıt verilen mesaj botunsa) kontrol et
+        // db import edildi mi? En tepeye eklenmesi gerek ama burada lazy load yapabiliriz ya da en üste ekletebiliriz.
+        // Ancak clean code için en üste eklemek daha doğru olur.
+        // Şimdilik burada require edelim, global scope'a karışmasın.
+        const { db } = require('../firebase');
+
         const isMentioned = message.mentions.users.has(client.user.id);
         const isReplyToBot = message.reference && (await message.fetchReference().catch(() => null))?.author.id === client.user.id;
 
-        // Sadece bot etiketlendiğinde çalışsın (User request specifically mentioned talking to AI, usually via mention)
-        // Ancak "reply atılırsa" dendiği için, bota reply atıldığında da çalışması mantıklı olabilir. 
-        // Kodun mevcut hali sadece mention'a bakıyor. Kullanıcı "reply atılırsa reply atılan mesaj hakkında..." dedi.
-        // Bu genellikle botun mesajına reply atılması veya bot etiketlenerek başkasına reply atılması senaryolarını kapsar.
-        // Mevcut mantığı koruyarak mention check'i tutuyorum.
+        // Bot etiketlendiyse veya bota yanıt verildiyse çalıştır
+        if (isMentioned || isReplyToBot) {
 
-        if (isMentioned) {
+            // Veritabanı bağlantı kontrolü
+            if (!db) {
+                console.error("Firebase DB aktif değil, hafıza özelliği kullanılamıyor.");
+                // DB yoksa bile en azından cevap versin diye devam edebiliriz ama history çalışmaz.
+            }
+
             // 10 Saniye Cooldown Kontrolü
             const now = Date.now();
             const cooldownAmount = 10 * 1000;
@@ -191,28 +197,15 @@ module.exports = {
 
                 if (now < expirationTime) {
                     const timeLeft = Math.round((expirationTime - now) / 1000);
-                    const warningMessage = await message.reply(`Lütfen tekrar mesaj göndermeden önce ${timeLeft} saniye bekle.`);
+                    const warningMsgContent = `Lütfen tekrar mesaj göndermeden önce ${timeLeft} saniye bekle.`;
 
-                    const interval = setInterval(async () => {
-                        const currentTime = Date.now();
-                        const remaining = Math.round((expirationTime - currentTime) / 1000);
+                    // Kullanıcıyı spamlamamak için warning mesajını yönet
+                    // Mevcut kodda reply atılmış, bunu koruyalım.
+                    const warningMessage = await message.reply(warningMsgContent);
 
-                        if (remaining <= 0) {
-                            clearInterval(interval);
-                            try {
-                                await warningMessage.delete();
-                            } catch (e) {
-                                // Mesaj zaten silinmiş olabilir veya hata oluşmuş olabilir
-                            }
-                        } else {
-                            try {
-                                await warningMessage.edit(`Lütfen tekrar mesaj göndermeden önce ${remaining} saniye bekle.`);
-                            } catch (e) {
-                                clearInterval(interval);
-                            }
-                        }
-                    }, 1000);
-
+                    // Geri sayım efekti (opsiyonel, user'ın mevcut kodundaki gibi)
+                    // Basitlik adına sadece silmeyi ekliyorum, çünkü karmaşık interval bazen api limitine takılabilir.
+                    setTimeout(() => warningMessage.delete().catch(() => { }), timeLeft * 1000);
                     return;
                 }
             }
@@ -221,15 +214,17 @@ module.exports = {
             setTimeout(() => cooldowns.delete(message.author.id), cooldownAmount);
 
             // Etiketi mesajdan çıkar
-            let query = message.content.replace(/<@!?\d+>/g, '').trim();
+            let query = message.content.replace(new RegExp(`<@!?${client.user.id}>`, 'g'), '').trim();
 
             // Reply kontrolü ve Context ekleme
             let contextMessage = "";
             if (message.reference && message.reference.messageId) {
                 try {
                     const repliedMessage = await message.channel.messages.fetch(message.reference.messageId);
+                    // Eğer yanıt verilen mesaj botun kendi mesajıysa, bunu history'den de çekebilirdik ama
+                    // reply içeriğini direkt context'e eklemek daha garantidir.
                     if (repliedMessage.content) {
-                        contextMessage = `Kullanıcı şu mesaja yanıt veriyor: "${repliedMessage.content}".\nBu mesaja dayanarak cevap ver.\n`;
+                        contextMessage = `[Bağlam: Kullanıcı şu mesaja yanıt veriyor: "${repliedMessage.content}"]\n`;
                     }
                 } catch (error) {
                     console.error("Reply mesajı alınamadı:", error);
@@ -240,42 +235,111 @@ module.exports = {
                 return message.reply('Merhaba! Bana bir soru sorabilirsin.');
             }
 
-            const finalUserContent = contextMessage ? `${contextMessage} Kullanıcının sorusu: ${query}` : query;
+            const finalUserContent = contextMessage ? `${contextMessage} ${query}` : query;
 
             try {
-                // Yazıyor... göstergesi
                 await message.channel.sendTyping();
 
+                // --- HAFIZA (MEMORY) YÖNETİMİ ---
+                let userHistory = [];
+                let userVibe = "Nötr"; // Varsayılan duygu durumu
+
+                let docRef;
+                if (db) {
+                    docRef = db.collection('ai_conversations').doc(message.author.id);
+                    const doc = await docRef.get();
+                    if (doc.exists) {
+                        const data = doc.data();
+                        userHistory = data.history || [];
+                        userVibe = data.vibe || "Nötr";
+                    }
+                }
+
+                // System Prompt - Kişilik ve Kurallar
+                const systemPrompt = `
+Sen Türkçe konuşan, zeki ve karakter sahibi bir Discord asistanısın.
+Kullanıcı ile konuşurken **SADECE TÜRKÇE** kullan. Asla İngilizce, İspanyolca vb. kelimeler kullanma (teknik terimler hariç).
+
+KULLANICI ANALİZİ (VIBE): "${userVibe}"
+- Eğer Vibe "Kaba", "Gıcık" veya "Sinirli" ise: Kısa, ters ve soğuk cevaplar ver. Alttan alma.
+- Eğer Vibe "İyi", "Nazik" veya "Samimi" ise: Çok sıcakkanlı, yardımcı ve samimi davran.
+- Eğer Vibe "Nötr" ise: Standart, kibar ve yardımcı ol.
+
+GÖREVİN:
+1. Kullanıcının mesajına (ve geçmiş sohbete) uygun cevabı üret.
+2. Kullanıcının bu son mesajındaki tavrına göre "Vibe" durumunu güncelle.
+
+ÖNEMLİ ÇIKTI FORMATI:
+Cevabını verdikten sonra, en sona MUTLAKA şu formatta vibe güncellemesini ekle:
+||VIBE: ...yeni vibe özeti...||
+
+Örnek Çıktı:
+Sana ne bundan? İşine bak. ||VIBE: Kaba ve ters||
+`;
+
+                // Mesaj geçmişini API formatına uygun hale getir
+                // Son 10 mesajı (5 çift) alalım ki token limiti dolmasın
+                const historyLimit = 10;
+                const recentHistory = userHistory.slice(-historyLimit);
+
+                const messagesPayload = [
+                    { role: "system", content: systemPrompt },
+                    ...recentHistory,
+                    { role: "user", content: finalUserContent }
+                ];
+
                 const chatCompletion = await groq.chat.completions.create({
-                    messages: [
-                        {
-                            role: "system",
-                            content: "Sen yardımsever bir Discord asistanısın. Sadece Türkçe konuş. Asla başka dillerden kelime kullanma. Kullanıcının sorularına net, doğru ve sadece Türkçe cevaplar ver. Eğer bir mesaja yanıt veriliyorsa, konuyu dağıtmadan o mesaj bağlamında kal."
-                        },
-                        {
-                            role: "user",
-                            content: finalUserContent,
-                        },
-                    ],
+                    messages: messagesPayload,
                     model: "llama-3.3-70b-versatile",
+                    temperature: 0.7, // Biraz yaratıcılık için
+                    max_tokens: 1024
                 });
 
-                const response = chatCompletion.choices[0]?.message?.content || "Bir cevap oluşturulamadı.";
+                const rawResponse = chatCompletion.choices[0]?.message?.content || "Bir cevap oluşturulamadı.";
 
-                // Discord 2000 karakter limiti kontrolü
-                if (response.length > 2000) {
-                    const chunks = response.match(/[\s\S]{1,2000}/g) || [];
-                    for (const chunk of chunks) {
-                        await message.reply(chunk);
+                // Vibe ve Cevabı Ayrıştır
+                const vibeRegex = /\|\|VIBE:\s*(.*?)\|\|/s;
+                const match = rawResponse.match(vibeRegex);
+
+                let botReply = rawResponse;
+                let newVibe = userVibe;
+
+                if (match) {
+                    botReply = rawResponse.replace(match[0], '').trim();
+                    newVibe = match[1].trim();
+                }
+
+                // Cevabı Gönder
+                if (botReply) {
+                    if (botReply.length > 2000) {
+                        const chunks = botReply.match(/[\s\S]{1,2000}/g) || [];
+                        for (const chunk of chunks) {
+                            await message.reply(chunk);
+                        }
+                    } else {
+                        await message.reply(botReply);
                     }
-                } else {
-                    await message.reply(response);
+                }
+
+                // Hafızayı Güncelle (Db varsa)
+                if (db && docRef) {
+                    // Yeni mesajları ekle
+                    recentHistory.push({ role: "user", content: finalUserContent });
+                    recentHistory.push({ role: "assistant", content: botReply }); // Vibe tag'i temizlenmiş hali
+
+                    // Tekrar limitle (history şişmesin)
+                    const updatedHistory = recentHistory.slice(-historyLimit);
+
+                    await docRef.set({
+                        history: updatedHistory,
+                        vibe: newVibe,
+                        lastInteraction: admin.firestore.FieldValue.serverTimestamp()
+                    }, { merge: true });
                 }
 
             } catch (error) {
-                console.error("Groq API Error:", error);
-                // Rate limit hatası vs. olursa kullanıcıya bildirmemek bazen daha iyidir ama burada genel hata mesajı var.
-                await message.reply("Üzgünüm, bir hata oluştu ve isteğini işleyemedim.");
+                console.error("Groq/Firebase Error:", error);
+                await message.reply("İşlem sırasında bir hata oluştu. Beynim biraz karıştı! 😵‍💫");
             }
         }
     },
