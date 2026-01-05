@@ -3,6 +3,7 @@ const Groq = require('groq-sdk');
 
 let groq;
 const cooldowns = new Map();
+const spamMap = new Map();
 
 module.exports = {
     name: 'messageCreate',
@@ -13,6 +14,132 @@ module.exports = {
             console.warn("GROQ_API_KEY eksik. Lütfen .env dosyanızı veya ortam değişkenlerinizi kontrol edin.");
             return;
         }
+
+        // --- MODERASYON / GUARD KONTROLLERİ ---
+        const { processedXP } = require('../utils/rankUtils');
+        const { getGuildSettings } = require('../utils/settingsCache');
+        // EmbedBuilder'ı import ediyoruz
+        const { PermissionsBitField, EmbedBuilder } = require('discord.js');
+
+        if (message.guild) {
+            const settings = await getGuildSettings(message.guild.id);
+
+            // Yönetici yetkisi veya Kurucu ise KORUMA kontrollerini atla
+            if (!message.member.permissions.has(PermissionsBitField.Flags.Administrator) && message.author.id !== process.env.OWNER_ID) {
+
+                const guard = settings?.guard;
+
+                if (guard) {
+                    // Helper: Ayarları Normalize Et
+                    const normalize = (val) => {
+                        if (typeof val === 'boolean') return { enabled: val, exemptRoles: [] };
+                        if (!val) return { enabled: false, exemptRoles: [] };
+                        return val;
+                    };
+
+                    const badWordsConfig = normalize(guard.badWords);
+                    const linksConfig = normalize(guard.links);
+                    const adsConfig = normalize(guard.ads);
+                    const spamConfig = normalize(guard.spam);
+
+                    // Helper: Rol Kontrolü (Muaf mı?)
+                    const isExempt = (config) => {
+                        if (!config.enabled) return true; // Kapalıysa "muaf" sayılır (kontrol edilmez)
+                        if (config.exemptRoles && config.exemptRoles.length > 0) {
+                            return message.member.roles.cache.hasAny(...config.exemptRoles);
+                        }
+                        return false;
+                    };
+
+                    // Ortak Uyarı Fonksiyonu
+                    const sendWarning = async (reason) => {
+                        try {
+                            const embed = new EmbedBuilder()
+                                .setColor('Red')
+                                .setDescription(`${message.author}, ${reason}`)
+                                .setFooter({ text: 'Bu mesaj 5 saniye sonra silinecektir.' });
+
+                            const msg = await message.channel.send({ content: `${message.author}`, embeds: [embed] });
+                            setTimeout(() => msg.delete().catch(() => { }), 5000);
+                        } catch (e) {
+                            console.error('Uyarı mesajı gönderilemedi:', e);
+                        }
+                    };
+
+                    // 1. Küfür Koruması
+                    if (badWordsConfig.enabled && !isExempt(badWordsConfig)) {
+                        const badWords = ["mk", "amk", "aq", "orospu", "piç", "yavşak", "sik", "yarrak", "oç"];
+                        const contentLower = message.content.toLowerCase();
+                        if (badWords.some(word => contentLower.includes(word))) {
+                            try {
+                                if (message.deletable) await message.delete();
+                                await sendWarning("bu sunucuda küfür yasaktır! 🤬");
+                                return;
+                            } catch (err) { }
+                        }
+                    }
+
+                    // 2. Link Koruması
+                    if (linksConfig.enabled && !isExempt(linksConfig)) {
+                        const linkRegex = /(https?:\/\/[^\s]+)/g;
+                        if (linkRegex.test(message.content)) {
+                            try {
+                                if (message.deletable) await message.delete();
+                                await sendWarning("bu sunucuda link paylaşmak yasaktır! 🔗");
+                                return;
+                            } catch (err) { }
+                        }
+                    }
+
+                    // 3. Reklam Koruması
+                    if (adsConfig.enabled && !isExempt(adsConfig)) {
+                        const adRegex = /(discord.gg\/|discordapp.com\/invite\/)/g;
+                        if (adRegex.test(message.content)) {
+                            try {
+                                if (message.deletable) await message.delete();
+                                await sendWarning("bu sunucuda reklam yapmak yasaktır! 📢");
+                                return;
+                            } catch (err) { }
+                        }
+                    }
+
+                    // 4. Spam Koruması
+                    if (spamConfig.enabled && !isExempt(spamConfig)) {
+                        const LIMIT = 5;
+                        const TIME_WINDOW = 5000;
+
+                        if (!spamMap.has(message.author.id)) {
+                            spamMap.set(message.author.id, { count: 1, firstMessageTime: Date.now() });
+                        } else {
+                            const userData = spamMap.get(message.author.id);
+                            const now = Date.now();
+
+                            if (now - userData.firstMessageTime < TIME_WINDOW) {
+                                userData.count++;
+                                if (userData.count >= LIMIT) {
+                                    try {
+                                        if (message.deletable) await message.delete();
+                                        if (userData.count === LIMIT) {
+                                            await sendWarning("çok hızlı mesaj gönderiyorsun! Spam yapma! 🔇");
+                                        }
+                                        return;
+                                    } catch (err) { }
+                                }
+                            } else {
+                                spamMap.set(message.author.id, { count: 1, firstMessageTime: now });
+                            }
+                        }
+                    }
+                }
+            }
+
+            // --- RANK SİSTEMİ ---
+            if (settings && settings.rank) {
+                await processedXP(message, settings.rank);
+            }
+        }
+
+        // --- AI (YAPAY ZEKA) İŞLEMLERİ ---
 
         if (!groq) {
             groq = new Groq({ apiKey: process.env.GROQ_API_KEY });
@@ -38,7 +165,29 @@ module.exports = {
 
                 if (now < expirationTime) {
                     const timeLeft = Math.round((expirationTime - now) / 1000);
-                    return message.reply(`Lütfen tekrar mesaj göndermeden önce ${timeLeft} saniye bekle.`);
+                    const warningMessage = await message.reply(`Lütfen tekrar mesaj göndermeden önce ${timeLeft} saniye bekle.`);
+
+                    const interval = setInterval(async () => {
+                        const currentTime = Date.now();
+                        const remaining = Math.round((expirationTime - currentTime) / 1000);
+
+                        if (remaining <= 0) {
+                            clearInterval(interval);
+                            try {
+                                await warningMessage.delete();
+                            } catch (e) {
+                                // Mesaj zaten silinmiş olabilir veya hata oluşmuş olabilir
+                            }
+                        } else {
+                            try {
+                                await warningMessage.edit(`Lütfen tekrar mesaj göndermeden önce ${remaining} saniye bekle.`);
+                            } catch (e) {
+                                clearInterval(interval);
+                            }
+                        }
+                    }, 1000);
+
+                    return;
                 }
             }
 

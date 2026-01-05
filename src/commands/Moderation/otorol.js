@@ -13,12 +13,11 @@ const { db } = require('../../firebase');
 module.exports = {
     data: new SlashCommandBuilder()
         .setName('otorol')
-        .setDescription('Otorol yönetim panelini açar.')
-        .setDefaultMemberPermissions(PermissionFlagsBits.Administrator),
+        .setDescription('Otorol yönetim panelini açar.'),
 
     async execute(interaction) {
-        // 1. Manuel Yetki Kontrolü (Daha belirgin mesaj için)
-        if (!interaction.member.permissions.has(PermissionFlagsBits.Administrator)) {
+        // 1. Manuel Yetki Kontrolü (Daha belirgin mesaj için) + Kurucu İzni
+        if (!interaction.member.permissions.has(PermissionFlagsBits.Administrator) && interaction.user.id !== process.env.OWNER_ID) {
             return interaction.reply({
                 content: '❌ Bu komutu kullanmak için **Yönetici** yetkisine sahip olmalısınız!',
                 flags: MessageFlags.Ephemeral
