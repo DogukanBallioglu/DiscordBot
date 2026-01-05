@@ -5,6 +5,7 @@ const fs = require("fs");
 const serviceAccountPath = path.join(__dirname, "../serviceAccountKey.json");
 
 let serviceAccount;
+let db; // db değişkenini burada tanımlıyoruz
 
 // 1. Öncelik: Environment Variable (Railway vb. için)
 if (process.env.FIREBASE_SERVICE_ACCOUNT) {
