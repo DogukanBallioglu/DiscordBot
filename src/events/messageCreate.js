@@ -265,27 +265,26 @@ Sanki bir Discord sunucusunda arkadaşlarınla sohbet ediyormuş gibi rahat, do�
 
 DİL KURALLARI (ÇOK ÖNEMLİ):
 1. **SADECE VE SADECE TÜRKÇE** konuş.
-2. **ASLA** Çince, Japonca, Korece, Kiril veya Arapça karakterler kullanma (Örn: 之间, こんにちは, etc. YASAK).
+2. **ASLA** Çince, Japonca, Korece, Kiril veya Arapça karakterler kullanma.
 3. Yabancı dilde cevap verme, sadece Türkçe.
 4. Emoji kullanmayı ihmal etme ama abartma.
 
-KULLANICI ANALİZİ (MEVCUT VIBE): "${userVibe}"
+KULLANICI ANALİZİ (MEVCUT DURUM): "${userVibe}"
 
-DAVRANIŞ REHBERİ (VIBE'A GÖRE):
+DAVRANIŞ REHBERİ (MEVCUT DURUMA GÖRE):
 - **Kaba/Gıcık/Sinirli**: "Hayırdır?", "Ne diyorsun sen?", "İşine bak" gibi kısa, ters ve atarlı cevaplar ver. Asla alttan alma, trip at.
 - **İyi/Nazik/Samimi**: Çok cana yakın ol. "Kanka", "Dostum" gibi hitaplar kullanabilirsin. Şakalaş.
 - **Nötr**: Standart bir arkadaş gibi konuş.
 
-GÖREVİN:
-1. Kullanıcının dediklerine, geçmiş sohbete ve o anki "Vibe" durumuna göre **İNSAN GİBİ** cevap ver.
-2. Cevabının sonuna, kullanıcının bu yeni mesajındaki tavrına göre güncellenmiş Vibe durumunu ekle.
+GÖREVİN VE ÇIKTI FORMATI:
+1. Kullanıcıya **İNSAN GİBİ** cevap ver.
+2. Cevabının **EN SONUNA**, kullanıcının tavrına göre güncellenmiş duygu durumunu şu özel etiket içinde ekle: ||VIBE:Durum||
+3. Bu etiketi ASLA cümlenin ortasında kullanma, sadece en sonda.
+4. Kullanıcıya asla "Vibe: Samimi" gibi şeyler söyleme. Sadece normal sohbet et, etiketi gizli bırak.
 
-ÇIKTI FORMATI:
-[Senin Cevabın] ||VIBE: [Yeni Vibe]||
-
-Örnekler:
-- (Kullanıcı küfür ederse): Ağzını topla istersen, uğraşamam seninle. ||VIBE: Kaba||
-- (Kullanıcı hal hatır sorarsa): İyiyim ya nolsun, yuvarlanıp gidiyoruz. Sen naber? ||VIBE: Samimi||
+Örnek Çıktılar:
+- (Kullanıcı küfür ederse): Ağzını topla istersen, uğraşamam seninle. ||VIBE:Kaba||
+- (Kullanıcı hal hatır sorarsa): İyiyim ya nolsun, yuvarlanıp gidiyoruz. Sen naber? ||VIBE:Samimi||
 `;
 
                 // Mesaj geçmişini API formatına uygun hale getir
@@ -309,14 +308,17 @@ GÖREVİN:
                 const rawResponse = chatCompletion.choices[0]?.message?.content || "Bir cevap oluşturulamadı.";
 
                 // Vibe ve Cevabı Ayrıştır
-                const vibeRegex = /\|\|VIBE:\s*(.*?)\|\|/s;
+                // Regex güncellemesi: Büyük/küçük harf duyarsız, boşluklara esnek
+                const vibeRegex = /\|\|VIBE:\s*(.*?)\|\|/i;
                 const match = rawResponse.match(vibeRegex);
 
                 let botReply = rawResponse;
                 let newVibe = userVibe;
 
                 if (match) {
+                    // Etiketi mesajdan tamamen sil
                     botReply = rawResponse.replace(match[0], '').trim();
+                    // Yeni durumu al
                     newVibe = match[1].trim();
                 }
 
@@ -350,7 +352,7 @@ GÖREVİN:
 
             } catch (error) {
                 console.error("Groq/Firebase Error:", error);
-                await message.reply("İşlem sırasında bir hata oluştu. Beynim biraz karıştı! 😵‍💫");
+                await message.reply("Şu an cevap veremiyorum, kısa bir devre yandım sanırım! 🔌");
             }
         }
     },
