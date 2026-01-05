@@ -324,7 +324,7 @@ GÖREVİN VE ÇIKTI FORMATI:
 
                 const chatCompletion = await groq.chat.completions.create({
                     messages: messagesPayload,
-                    model: "llama-3.3-70b-versatile",
+                    model: "llama-3.1-8b-instant",
                     temperature: 0.7, // Biraz yaratıcılık için
                     max_tokens: 1024
                 });
@@ -380,7 +380,8 @@ GÖREVİN VE ÇIKTI FORMATI:
 
             } catch (error) {
                 console.error("Groq/Firebase Error:", error);
-                await message.reply("Şu an cevap veremiyorum, kısa bir devre yandım sanırım! 🔌");
+                // Hata detayını kullanıcıya gösterelim ki sorunu anlayabilelim
+                await message.reply(`Şu an cevap veremiyorum, kısa bir devre yandım sanırım! 🔌\n\`Hata: ${error.message || error}\``);
             }
         }
     },
