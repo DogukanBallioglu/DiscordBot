@@ -1,5 +1,6 @@
 const { SlashCommandBuilder, EmbedBuilder, ActionRowBuilder, StringSelectMenuBuilder, RoleSelectMenuBuilder, ButtonBuilder, ButtonStyle, ComponentType, ModalBuilder, TextInputBuilder, TextInputStyle, PermissionsBitField } = require('discord.js');
 const { getGuildSettings, updateGuildSettings } = require('../../utils/settingsCache');
+const { db } = require('../../firebase');
 
 module.exports = {
     data: new SlashCommandBuilder()
@@ -46,9 +47,9 @@ module.exports = {
 
             const payload = { embeds: [embed], components: [row] };
             if (targetInteraction.replied || targetInteraction.deferred) {
-                await targetInteraction.editReply(payload);
+                return await targetInteraction.editReply(payload);
             } else {
-                await targetInteraction.reply({ ...payload, ephemeral: true });
+                return await targetInteraction.reply({ ...payload, ephemeral: true, fetchReply: true });
             }
         };
 
@@ -68,7 +69,7 @@ module.exports = {
                     { name: 'Ban Hakkı (Limit)', value: `${limit} adet`, inline: true },
                     { name: 'Sıfırlanma Süresi', value: `${days} gün`, inline: true }
                 )
-                .setFooter({ text: 'Ayarları değiştirmek için aşağıdaki kontrolleri kullanın.' });
+                .setFooter({ text: `Ayarları değiştirmek için aşağıdaki kontrolleri kullanın.\nSistem her ${days} günde bir kullanıcı haklarını otomatik yeniler.` });
 
             // Rol Seçim Menüsü
             const roleSelect = new RoleSelectMenuBuilder()
@@ -88,6 +89,12 @@ module.exports = {
                 .setStyle(ButtonStyle.Primary)
                 .setEmoji('📅');
 
+            const manageUsersBtn = new ButtonBuilder()
+                .setCustomId('manage_ban_users')
+                .setLabel('Yetkilileri Yönet')
+                .setStyle(ButtonStyle.Success)
+                .setEmoji('👥');
+
             const resetBtn = new ButtonBuilder()
                 .setCustomId('reset_ban_settings')
                 .setLabel('Ayarları Sıfırla')
@@ -101,7 +108,8 @@ module.exports = {
                 .setEmoji('⬅️');
 
             const row1 = new ActionRowBuilder().addComponents(roleSelect);
-            const row2 = new ActionRowBuilder().addComponents(limitBtn, dayBtn, resetBtn, backBtn);
+            const row2 = new ActionRowBuilder().addComponents(limitBtn, dayBtn, manageUsersBtn);
+            const row3 = new ActionRowBuilder().addComponents(resetBtn, backBtn);
 
             // Hata Düzeltme: Modal submit sonrası veya normal buton sonrası duruma göre güncelleme yap
             // ModalSubmitInteraction için update() kullanılabilir ama bazen editReply gerekebilir.
@@ -109,23 +117,99 @@ module.exports = {
             try {
                 if (targetInteraction.isModalSubmit && targetInteraction.isModalSubmit()) {
                     // Modal submitleri için update() message component update eder
-                    await targetInteraction.update({ embeds: [embed], components: [row1, row2] });
+                    await targetInteraction.update({ embeds: [embed], components: [row1, row2, row3] });
                 } else if (targetInteraction.replied || targetInteraction.deferred) {
-                    await targetInteraction.editReply({ embeds: [embed], components: [row1, row2] });
+                    await targetInteraction.editReply({ embeds: [embed], components: [row1, row2, row3] });
                 } else {
-                    await targetInteraction.update({ embeds: [embed], components: [row1, row2] });
+                    await targetInteraction.update({ embeds: [embed], components: [row1, row2, row3] });
                 }
             } catch (e) {
                 // Eğer update başarısız olursa (örn: already acknowledged hatası devam ederse) editReply dene
-                await targetInteraction.editReply({ embeds: [embed], components: [row1, row2] }).catch(() => { });
+                await targetInteraction.editReply({ embeds: [embed], components: [row1, row2, row3] }).catch(() => { });
             }
         };
 
+        // 3. Kullanıcı Yönetim Listesi (Ban Hakları)
+        const showUserList = async (targetInteraction, currentSettings) => {
+            const roleId = currentSettings.authorizedRole;
+            const limit = currentSettings.limit || 0;
+
+            if (!roleId) {
+                return targetInteraction.editReply({ content: '⚠️ Önce yetkili bir rol belirlemelisiniz!', embeds: [], components: [] });
+            }
+
+            // Rol üyelerini çek (Cache + Fetch)
+            // Sadece cache kullanırsak, bot yeni başladığında kimseyi görmez.
+            // Önce rolü fetchleyelim (gerekirse), sonra memberları.
+            const role = await targetInteraction.guild.roles.fetch(roleId);
+            if (!role) {
+                return targetInteraction.editReply({ content: '⚠️ Belirlenen role erişilemiyor (silinmiş olabilir).', embeds: [], components: [] });
+            }
+
+            // Tüm üyeleri fetchle ki role.members dolsun (Rate Limit Koruması)
+            if (targetInteraction.guild.members.cache.size < targetInteraction.guild.memberCount) {
+                try {
+                    await targetInteraction.guild.members.fetch();
+                } catch (err) {
+                    console.log('Member fetch uyarısı (Rate Limit olabilir):', err.message);
+                }
+            }
+
+            // Member listesi (ilk 25)
+            const members = Array.from(role.members.values()).slice(0, 25);
+
+            if (members.length === 0) {
+                return targetInteraction.editReply({ content: '⚠️ Bu role sahip hiç üye bulunamadı.', embeds: [], components: [] });
+            }
+
+            // DB'den verilerini çek
+            // Optimization: Promise.all
+            const memberStats = await Promise.all(members.map(async (m) => {
+                const ref = db.collection('users').doc(m.id).collection('moderation_stats').doc(targetInteraction.guild.id);
+                const doc = await ref.get();
+                const data = doc.exists ? doc.data() : { banCount: 0 };
+                return {
+                    id: m.id,
+                    tag: m.user.tag,
+                    count: data.banCount || 0
+                };
+            }));
+
+            const embed = new EmbedBuilder()
+                .setTitle('👥 Yetkili Ban Durumları')
+                .setDescription('Aşağıdaki listeden bir üyeyi seçerek ban hakkını sıfırlayabilirsiniz.')
+                .setColor('Green')
+                .setFooter({ text: 'Sadece ilk 25 üye gösterilmektedir.' });
+
+            const selectMenu = new StringSelectMenuBuilder()
+                .setCustomId('reset_user_stats_select')
+                .setPlaceholder('Ban Hakkını Sıfırla (Seçiniz)')
+                .addOptions(
+                    memberStats.map(m => ({
+                        label: m.tag.substring(0, 99), // Discord limit
+                        description: `Kullanılan: ${m.count} / ${limit}`,
+                        value: m.id,
+                        emoji: '👤'
+                    }))
+                );
+
+            const backBtn = new ButtonBuilder()
+                .setCustomId('back_to_ban_settings')
+                .setLabel('Geri Dön')
+                .setStyle(ButtonStyle.Secondary)
+                .setEmoji('⬅️');
+
+            const row1 = new ActionRowBuilder().addComponents(selectMenu);
+            const row2 = new ActionRowBuilder().addComponents(backBtn);
+
+            await targetInteraction.editReply({ content: null, embeds: [embed], components: [row1, row2] });
+        };
+
         // --- EXECUTION BAŞLANGICI ---
-        await showMainMenu(interaction);
+        const message = await showMainMenu(interaction);
 
         // Collector
-        const filter = i => i.user.id === interaction.user.id;
+        const filter = i => i.user.id === interaction.user.id && i.message.id === message.id;
         // 5 dakikalık geniş bir collector
         const collector = interaction.channel.createMessageComponentCollector({ filter, time: 300000 });
 
@@ -145,6 +229,44 @@ module.exports = {
             else if (i.customId === 'back_to_main') {
                 await i.update({});
                 await showMainMenu(interaction);
+            }
+            else if (i.customId === 'back_to_ban_settings') {
+                await i.deferUpdate();
+                let banSettings = await reloadSettings();
+                await showBanSettings(i, banSettings);
+            }
+            else if (i.customId === 'manage_ban_users') {
+                await i.deferUpdate();
+                let banSettings = await reloadSettings();
+                await showUserList(i, banSettings);
+            }
+            else if (i.customId === 'reset_user_stats_select') {
+                await i.deferUpdate();
+                const targetUserId = i.values[0];
+                const banSettings = await reloadSettings();
+
+                // Önce mevcut veriyi kontrol et
+                const ref = db.collection('users').doc(targetUserId).collection('moderation_stats').doc(interaction.guild.id);
+                const doc = await ref.get();
+                const data = doc.exists ? doc.data() : { banCount: 0 };
+
+                if (!data.banCount || data.banCount === 0) {
+                    await i.followUp({ content: '⚠️ Bu kullanıcının zaten kullanılmış veya sıfırlanacak bir ban hakkı yok.', ephemeral: true });
+                    // Listeyi yenilemeye gerek yok ama seçim kilidini kaldırmak için tekrar render edebiliriz
+                    await showUserList(i, banSettings);
+                    return;
+                }
+
+                // DB Sıfırlama
+                await ref.set({
+                    banCount: 0,
+                    lastBanReset: Date.now()
+                }, { merge: true });
+
+                await i.followUp({ content: `✅ <@${targetUserId}> kullanıcısının ban hakkı sıfırlandı!`, ephemeral: true });
+
+                // Listeyi güncelle
+                await showUserList(i, banSettings);
             }
             else if (i.customId === 'reset_ban_settings') {
                 await i.deferUpdate();
@@ -219,6 +341,7 @@ module.exports = {
         const modalHandler = async (modalInteraction) => {
             if (modalInteraction.user.id !== interaction.user.id) return;
             if (!modalInteraction.isModalSubmit()) return;
+            if (modalInteraction.message && modalInteraction.message.id !== message.id) return;
 
             // Verileri taze çek
             let banSettings = await reloadSettings();
