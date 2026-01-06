@@ -31,6 +31,17 @@ module.exports = {
                     await message.reply('Komut çalıştırılırken bir hata oluştu!');
                 }
                 return; // Komut çalıştıysa başka işlem yapma (AI, XP vs.)
+            } else {
+                // Komut bulunamadıysa modern bir uyarı ver
+                const { EmbedBuilder } = require('discord.js');
+                const errorEmbed = new EmbedBuilder()
+                    .setColor('Orange')
+                    .setDescription(`🛑 **${commandName}** adında bir komut bulamadım!\n💡 Komut listesi için **/yardım** yazabilirsin.`);
+
+                // Mesajı gönder ve 5 saniye sonra sil ki sohbet kirlenmesin
+                const msg = await message.reply({ embeds: [errorEmbed] });
+                setTimeout(() => msg.delete().catch(() => { }), 5000);
+                return; // Yanlış komut girildiyse de devam etmesin
             }
         }
 

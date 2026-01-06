@@ -13,7 +13,17 @@ module.exports = {
 
         // Komut Klasörlerini (Kategorileri) Oku
         const commandsPath = path.join(__dirname, '..');
-        const commandFolders = fs.readdirSync(commandsPath).filter(file => fs.statSync(path.join(commandsPath, file)).isDirectory());
+        const prefixCommandsPath = path.join(__dirname, '../../prefixCommands');
+
+        const slashFolders = fs.readdirSync(commandsPath).filter(file => fs.statSync(path.join(commandsPath, file)).isDirectory());
+        let prefixFolders = [];
+
+        if (fs.existsSync(prefixCommandsPath)) {
+            prefixFolders = fs.readdirSync(prefixCommandsPath).filter(file => fs.statSync(path.join(prefixCommandsPath, file)).isDirectory());
+        }
+
+        // Klasöleri Birleştir ve Tekilleştir (Set kullanarak)
+        const commandFolders = [...new Set([...slashFolders, ...prefixFolders])];
 
         // Kategori İsimlerini Emojilerle Eşleştir (İsteğe bağlı güzel görünüm için)
         const categoryEmojis = {

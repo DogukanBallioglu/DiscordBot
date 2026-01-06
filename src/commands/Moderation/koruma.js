@@ -42,7 +42,8 @@ module.exports = {
                 roleLog: false,
                 messageLog: false,
                 memberLog: false,
-                voiceLog: false
+                voiceLog: false,
+                penaltyLog: false
             };
         }
         let logs = settings.logs;
@@ -56,11 +57,12 @@ module.exports = {
             links: '🔗',
             ads: '📢',
             spam: '💬',
-            logs: '📜'
+            logs: '📜',
+            hammer: '🔨'
         };
 
         // Helper: Logların herhangi biri açık mı?
-        const inputsAreActive = (l) => l.channelLog || l.roleLog || l.messageLog || l.memberLog || l.voiceLog;
+        const inputsAreActive = (l) => l.channelLog || l.roleLog || l.messageLog || l.memberLog || l.voiceLog || l.penaltyLog;
 
         // Ana Menü Oluşturucu
         const generateMainMenu = () => {
@@ -107,6 +109,7 @@ Log Sistemi, sunucudaki önemli olayları kayıt altına alır.
 • Rol Olayları: ${logs.roleLog ? EMOJIS.check : EMOJIS.cross}
 • Mesaj Olayları: ${logs.messageLog ? EMOJIS.check : EMOJIS.cross}
 • Üye Olayları (Giriş/Çıkış/Ban): ${logs.memberLog ? EMOJIS.check : EMOJIS.cross}
+• Ceza Logları (Ban/Kick/Mute): ${logs.penaltyLog ? EMOJIS.check : EMOJIS.cross}
 `)
                 .setColor(logs.channelId ? 'Green' : 'Orange');
 
@@ -126,12 +129,13 @@ Log Sistemi, sunucudaki önemli olayları kayıt altına alır.
                         .setCustomId('log_type_select')
                         .setPlaceholder('Açmak/Kapatmak istediğiniz logları seçin...')
                         .setMinValues(0)
-                        .setMaxValues(4)
+                        .setMaxValues(5)
                         .addOptions([
                             { label: 'Kanal Olayları (Oluşturma/Silme/Güncelleme)', value: 'channelLog', emoji: '📝', default: logs.channelLog },
                             { label: 'Rol Olayları (Oluşturma/Silme/Güncelleme)', value: 'roleLog', emoji: '👮', default: logs.roleLog },
                             { label: 'Mesaj Olayları (Silme/Düzenleme)', value: 'messageLog', emoji: '📨', default: logs.messageLog },
-                            { label: 'Üye Olayları (Giriş/Çıkış/Yasaklama)', value: 'memberLog', emoji: '👥', default: logs.memberLog }
+                            { label: 'Üye Olayları (Giriş/Çıkış/Yasaklama)', value: 'memberLog', emoji: '👥', default: logs.memberLog },
+                            { label: 'Ceza Logları (Özel Ban Sistemi vb.)', value: 'penaltyLog', emoji: '🔨', default: logs.penaltyLog }
                         ])
                 );
 
@@ -146,6 +150,24 @@ Log Sistemi, sunucudaki önemli olayları kayıt altına alır.
 
             return { embeds: [embed], components: [channelRow, typeRow, buttonRow] };
         };
+
+        // Alt Menü (Detay) Oluşturucu (DEĞİŞMEDİ AMA KOD BÜTÜNLÜĞÜ İÇİN NEXT...)
+        // ...
+        // ... (Bu kısım replace tool ile korunabilir, ama generateLogMenu'dan sonrası için dikkatli olmalıyım)
+        // Burada sadece generateLogMenu'yu ve öncesini değiştirdim.
+        // Aşağıdaki handler kısmını da güncellemem gerek.
+
+        /* 
+           Wait, replace_file_content replaces a *contiguous block*. 
+           I cannot easily replace both the menu generation AND the handler in one go if they are far apart properly without overwriting the DetailMenu generator.
+           
+           I will replace from the 'let logs = settings.logs;' initialization down to end of 'generateLogMenu'. 
+           Then I will do a separate second replacement for the handler logic.
+        */
+
+        // This tool call covers initialization and generateLogMenu.
+
+        // ... (See ReplacementContent above)
 
         // Alt Menü (Detay) Oluşturucu
         const generateDetailMenu = (type) => {
@@ -268,6 +290,7 @@ Bu korumadan etkilenmeyecek rolleri ve kanalları aşağıdan seçebilirsiniz.`)
                 logs.roleLog = selected.includes('roleLog');
                 logs.messageLog = selected.includes('messageLog');
                 logs.memberLog = selected.includes('memberLog');
+                logs.penaltyLog = selected.includes('penaltyLog');
 
                 await updateGuildSettings(interaction.guild.id, { logs });
                 await i.editReply(generateLogMenu());
