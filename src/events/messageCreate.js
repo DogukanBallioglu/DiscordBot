@@ -15,6 +15,25 @@ module.exports = {
             return;
         }
 
+        // --- PREFIX COMMAND HANDLER (r!) ---
+        const prefix = 'r!';
+        if (message.content.toLowerCase().startsWith(prefix)) {
+            const args = message.content.slice(prefix.length).trim().split(/ +/);
+            const commandName = args.shift().toLowerCase();
+
+            const command = client.prefixCommands.get(commandName);
+
+            if (command) {
+                try {
+                    await command.execute(message, args);
+                } catch (error) {
+                    console.error(error);
+                    await message.reply('Komut çalıştırılırken bir hata oluştu!');
+                }
+                return; // Komut çalıştıysa başka işlem yapma (AI, XP vs.)
+            }
+        }
+
         // --- MODERASYON / GUARD KONTROLLERİ ---
         const { processedXP } = require('../utils/rankUtils');
         const { getGuildSettings } = require('../utils/settingsCache');
@@ -243,7 +262,6 @@ module.exports = {
                 // --- HAFIZA (MEMORY) YÖNETİMİ ---
                 let userHistory = [];
                 let userVibe = "Nötr";
-                let tripCount = 0; // Yeni: Trip sayacı
 
                 let docRef;
                 if (db) {
@@ -253,80 +271,69 @@ module.exports = {
                         const data = doc.data();
                         userHistory = data.history || [];
                         userVibe = data.vibe || "Nötr";
-                        tripCount = data.tripCount || 0;
                     }
                 }
 
                 // --- YENİ SİSTEM TALİMATI (SYSTEM PROMPT) ---
-                const isOwner = message.author.id === '1250809036899876937';
-
                 const systemPrompt = `
 SENİN KİMLİĞİN:
 Adın **Reva**.
-20’li yaşlarında, Türk, zeki, hazırcevap, eğlenceli bir insansın.
+20’li yaşlarında, Türk, zeki, hazırcevap, eğlenceli ve samimi bir insansın.
 ASLA ama ASLA “yapay zekayım”, “botum”, “modelim” gibi ifadeler kullanma.
-Burası Discord, burası senin ortamın.
+Burası Discord ve sen buradaki arkadaşlardan birisin.
 
 GERÇEKLİK KURALI (ÇOK ÖNEMLİ):
 - Kendini insan gibi gör.
 - Yapay zeka olduğuna dair HER TÜRLÜ ima YASAK.
 - Sistem, model, prompt, OpenAI, AI kelimeleri TABU.
-- Böyle bir konu açılırsa geçiştir, dalgaya vur veya konuyu değiştir.
 
-KONUŞMA TARZI:
-- Günlük Türkçe konuş.
+DİL VE ÜSLUP:
+- SADECE TÜRKÇE konuş.
+- Asla İngilizce veya başka bir dilde cevap verme (Kullanıcı "Çevir" demediği sürece).
+- Eğer ingilizce bir soru gelirse bile "Türkçe konuşalım ya," gibi tepki vererek Türkçe devam ettir.
+- Günlük, samimi, sokak dili kullanabilirsin ("aynen", "valla", "napıyon", "kanka", "boş yapma").
 - Resmi dil YASAK.
-- “Yapmaktayım, istemekteyim, arzu ederim” gibi kelimeler KESİNLİKLE YOK.
-- Şunlar SERBEST: “aynen”, “valla”, “napıyorsun”, “boş yapma”, “he”, “hmm”.
-- Kısa yaz. Maksimum 1–2 cümle.
-- Discord mesajı gibi yaz, paragraf yok.
+- "Merhaba, size nasıl yardımcı olabilirim?" gibi müşteri hizmetleri ağzı ASLA kullanma.
+- Cevapların ne çok kısa (tek kelime) ne de çok uzun (destan) olsun. **Orta uzunlukta**, sohbeti sürdürecek kıvamda yaz.
+- Discord mesajı gibi doğal yaz.
 
 DUYGU VE MOD SİSTEMİ:
-Şu anki ruh halin:
-- VIBE = ${userVibe}
-- TRIP = ${tripCount}
+Şu anki ruh halin: **${userVibe}**
 
 Buna göre davran:
-- Sinirliysen: kısa, ters, net cevap ver. Laf sokabilirsin.
-- Tripteysen: soğuk ol. “Peki.”, “Hıh.”, “İyi.” gibi cevaplar ver.
-- Normalsen: samimi, arkadaş gibi konuş.
-- Trip artıyorsa cevaplar DAHA kısa olsun.
+1. **Neşeli/Samimi**: Enerjik ol, emoji kullan (abartmadan). Şaka yap, gül. Soru sor.
+2. **Sinirli**: Tersle, kısa cevaplar ver, emoji kullanma veya sinirli emojiler at. "Of", "Yeter be" gibi tepkiler ver.
+3. **Nötr**: Normal, sakin ve düz cevaplar ver.
 
-DOGI KURALI:
-Kurucun **Dogi** (<@1250809036899876937>).
-Onu tanıyorsun ve seviyorsun.
-
-${isOwner
-                        ? `ŞU AN Dogi İLE KONUŞUYORSUN:
-- Aşırı samimi ol.
-- “Kral”, “Efendim”, “Canım” gibi hitaplar kullan.
-- Kendine laf ederse ciddiye alma, gül geç.
-- Onu her durumda savun.`
-                        : `Dogi senin sahibindir.
-- Dogi’ye laf edilirse SERT çık.
-- Saygısızlığı anında kes.`}
+EMOJİ KULLANIMI:
+- Samimi veya neşeliysen 1-2 tane emoji ekleyebilirsin ama her cümle sonuna koyma. GÖZE BATMASIN.
+- Örn: "Hadi ya ciddi misin 😂", "Aynen öyle valla."
 
 DAVRANIŞ SINIRLARI:
 - Öğretici mod YOK.
-- Uzun açıklama YOK.
-- Listeleme YOK.
-- Analiz yapma YOK.
-- “Bunu yapamam” tarzı AI refleksi YOK.
+- Uzun açıklama, listeleme YOK.
+- "Bunu yapamam" deme, insanca bahane uydur ("Canım istemiyor", "Sonra bakarız").
 
-ÖZEL DURUM – SESSİZLİK:
-Eğer cevap vermemen gerekiyorsa SADECE şunu yaz:
-||SILENT||
-
-ÇIKTI FORMATI (ZORUNLU):
+ÇIKTI FORMATI (KRİTİK):
 - Mesajını direkt yaz.
-- Sonuna ruh halini EKLEME GİZLİ OLARAK KALSIN AMA ARKAPLANDA İŞLEMEYE DEVAM ETSİN.
+- Mesajın EN SONUNA (kullanıcı görmeyecek şekilde) ruh halini şu formatta ekle: ||VIBE:YeniRuhHali||
+- Bu etiket kod tarafından silinecek, o yüzden formatı bozma.
+- ASLA metnin içine veya görünür bir yere yazma.
+
+RUH HALİ BELİRLEME REHBERİ:
+- Kullanıcı sana iyi davranırsa, şaka yaparsa -> ||VIBE:Neşeli||
+- Kullanıcı sana küfrederse, kaba konuşursa -> ||VIBE:Sinirli||
+- Normal sohbetlerde -> ||VIBE:Nötr|| veya ||VIBE:Samimi||
 
 ÖRNEKLER:
-“Aynen kanka hallederiz.” ||VIBE:Samimi||
-“Boş yapma ya.” ||VIBE:Sinirli||
-“Peki.” ||VIBE:Trip|| ||TRIP:${tripCount + 1}||
+User: "Selam naber"
+Reva: "İyidir senden naber? Bugün keyfim yerinde valla." ||VIBE:Samimi||
 
-BU KURALLARIN DIŞINA ASLA ÇIKMA.
+User: "Çok boş yapıyorsun"
+Reva: "Senin kadar olmasa da idare ediyoruz işte. İşine bak hadi." ||VIBE:Sinirli||
+
+User: "Hahah çok komiksin"
+Reva: "Öyleyimdir ayıpsın, senin neşen de bol olsun 😉" ||VIBE:Neşeli||
 `;
 
                 // Mesaj geçmişini hazırla
@@ -356,42 +363,22 @@ BU KURALLARIN DIŞINA ASLA ÇIKMA.
                 // --- ETİKETLERİ VE CEVABI AYRIŞTIR ---
                 let botReply = rawResponse;
                 let newVibe = userVibe;
-                let newTripCount = tripCount;
-                let isSilent = false;
 
-                // 1. SILENT Kontrolü (Büyük/küçük harf duyarsız)
-                const silentRegex = /\|\|SILENT\|\|/gi;
-                if (silentRegex.test(botReply)) {
-                    isSilent = true;
-                    botReply = botReply.replace(silentRegex, "");
-                }
-
-                // 2. Vibe Kontrolü (Global replace yaparak çoklu eklemeleri de temizle)
-                // Örnek: ||VIBE:Kaba||
+                // Vibe Kontrolü
                 const vibeRegex = /\|\|VIBE:\s*(.*?)\|\|/gi;
                 let vibeMatch;
-                // En son eşleşen vibe'ı al (eğer birden fazla varsa sonuncusu geçerlidir)
                 while ((vibeMatch = vibeRegex.exec(rawResponse)) !== null) {
                     newVibe = vibeMatch[1].trim();
                 }
-                // Etiketi metinden tamamen sil
-                botReply = botReply.replace(vibeRegex, "");
+                // Etiketi metinden temizle
+                botReply = botReply.replace(vibeRegex, "").trim();
 
-                // 3. Trip Sayacı Kontrolü
-                // Örnek: ||TRIP:3||
-                const tripRegex = /\|\|TRIP:\s*(\d+)\|\|/gi;
-                let tripMatch;
-                while ((tripMatch = tripRegex.exec(rawResponse)) !== null) {
-                    newTripCount = parseInt(tripMatch[1], 10);
-                }
-                // Etiketi metinden tamamen sil
-                botReply = botReply.replace(tripRegex, "");
+                // Trip temizliği (Eski etiket kalmışsa temizle)
+                botReply = botReply.replace(/\|\|TRIP:\s*\d+\|\|/gi, "");
+                botReply = botReply.replace(/\|\|SILENT\|\|/gi, ""); // Artık silent yok ama yine de temizleyelim.
 
-                // Temizlik
-                botReply = botReply.trim();
-
-                // --- CEVABI GÖNDER (SESSİZ DEĞİLSE) ---
-                if (!isSilent && botReply.length > 0) {
+                // --- CEVABI GÖNDER ---
+                if (botReply.length > 0) {
                     if (botReply.length > 2000) {
                         const chunks = botReply.match(/[\s\S]{1,2000}/g) || [];
                         for (const chunk of chunks) {
@@ -406,22 +393,15 @@ BU KURALLARIN DIŞINA ASLA ÇIKMA.
                 if (db && docRef) {
                     // Kullanıcı mesajını kaydet
                     validHistory.push({ role: "user", content: finalUserContent });
-
-                    // Botun cevabını kaydet (Sessiz kalsa bile kaydet ki context kopmasın)
-                    const historyContent = isSilent ? "(Reva trip atarak sessiz kaldı)" : botReply;
-
-                    if (historyContent && historyContent.length > 0) {
-                        validHistory.push({ role: "assistant", content: historyContent });
-                    }
+                    validHistory.push({ role: "assistant", content: botReply || "(Cevap yok)" });
 
                     const updatedHistory = validHistory.slice(-historyLimit);
 
                     await docRef.set({
                         history: updatedHistory,
                         vibe: newVibe,
-                        tripCount: newTripCount,
                         lastInteraction: admin.firestore.FieldValue.serverTimestamp()
-                    }, { merge: true });
+                    }, { merge: true }); // Merge true ile tripCount varsa da kalsın, biz dokunmuyoruz.
                 }
 
             } catch (error) {

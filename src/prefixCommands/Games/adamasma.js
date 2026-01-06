@@ -1,4 +1,4 @@
-const { SlashCommandBuilder, EmbedBuilder } = require('discord.js');
+const { EmbedBuilder } = require('discord.js');
 
 const words = [
     { word: 'ELMA', category: 'Meyve' },
@@ -76,10 +76,10 @@ _|_`
 ];
 
 module.exports = {
-    data: new SlashCommandBuilder()
-        .setName('adamasmaca')
-        .setDescription('Resimli adam asmaca oyunu oynarsınız.'),
-    async execute(interaction) {
+    name: 'adamasmaca',
+    aliases: ['adamasmaca', 'hangman'],
+    description: 'Resimli adam asmaca oyunu oynarsınız.',
+    async execute(message, args) {
         const selection = words[Math.floor(Math.random() * words.length)];
         const word = selection.word;
         const category = selection.category;
@@ -90,7 +90,7 @@ module.exports = {
         let gameOver = false;
 
         const generateEmbed = (status, feedback = '') => {
-            const currentStage = hangmanStages[6 - lives];
+            const currentStage = hangmanStages[6 - lives] || hangmanStages[6]; // Güvenlik önlemi
 
             let color = 0x2F3136;
             let topText = feedback;
@@ -141,10 +141,10 @@ ${topText}
             return embed;
         };
 
-        const message = await interaction.reply({ embeds: [generateEmbed('playing', `**${interaction.client.user.username} - Adam Asmaca**`)], fetchReply: true });
+        await message.reply({ embeds: [generateEmbed('playing', `**${message.client.user.username} - Adam Asmaca**`)] });
 
-        const filter = m => m.author.id === interaction.user.id;
-        const collector = interaction.channel.createMessageCollector({ filter, time: 600000 });
+        const filter = m => m.author.id === message.author.id;
+        const collector = message.channel.createMessageCollector({ filter, time: 600000 });
 
         collector.on('collect', async m => {
             if (gameOver) return;
@@ -152,6 +152,9 @@ ${topText}
 
             const content = m.content.toUpperCase().replace(/İ/g, 'I');
             let feedback = '';
+
+            // User mesajını silmeye çalışalım (temiz görünüm için opsiyonel, hata verirse geçsin)
+            // m.delete().catch(() => {}); // Kullanıcı mesajını silmek bazen kafa karıştırabilir, şimdilik yorum satırı yapıyorum.
 
             if (content === 'BITIR') {
                 gameOver = true;
@@ -167,11 +170,14 @@ ${topText}
             }
 
             if (content.length === 1) {
+                if (!/[A-Z]/.test(content)) return; // Sadece harf kabul et
+
                 if (guessed.includes(content)) {
                     const warnEmbed = new EmbedBuilder()
-                        .setDescription('**Bu harf söylendi**')
+                        .setDescription('**Bu harf zaten söylendi**')
                         .setColor(0xFFA500);
-                    await m.reply({ embeds: [warnEmbed] }).catch(() => { });
+                    const warnMsg = await m.reply({ embeds: [warnEmbed] }).catch(() => { });
+                    setTimeout(() => warnMsg.delete().catch(() => { }), 3000);
                     return;
                 }
 
@@ -192,7 +198,7 @@ ${topText}
                     feedback = '**Doğru Kelime!**';
                 } else {
                     lives -= 2;
-                    feedback = '**Yanlış Kelime!**';
+                    feedback = '**Yanlış Kelime! (-2 Hak)**';
                 }
             }
 
@@ -211,8 +217,8 @@ ${topText}
 
         collector.on('end', (collected, reason) => {
             if (reason === 'time') {
-                interaction.followUp({ content: 'Süre doldu!', ephemeral: true }).catch(() => { });
+                message.channel.send('Adam asmaca süresi doldu!');
             }
         });
-    },
+    }
 };

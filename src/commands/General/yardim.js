@@ -77,40 +77,71 @@ module.exports = {
             if (i.customId === 'help_category_select') {
                 const selectedCategory = i.values[0];
 
-                // Seçilen kategorideki dosyaları oku
+                // Seçilen kategorideki dosyaları oku (Slash Komutları)
                 const categoryPath = path.join(commandsPath, selectedCategory);
-                const commandFiles = fs.readdirSync(categoryPath).filter(file => file.endsWith('.js'));
+                let commandFiles = fs.readdirSync(categoryPath).filter(file => file.endsWith('.js'));
+
+                // Prefix Komutlarını da Kontrol Et (Özellikle Games için)
+                const prefixCommandsPath = path.join(__dirname, '../../prefixCommands', selectedCategory);
+                let prefixCommandFiles = [];
+                if (fs.existsSync(prefixCommandsPath)) {
+                    prefixCommandFiles = fs.readdirSync(prefixCommandsPath).filter(file => file.endsWith('.js'));
+                }
 
                 const embed = new EmbedBuilder()
                     .setTitle(`${categoryEmojis[selectedCategory] || '📁'} ${categoryNames[selectedCategory] || selectedCategory} Komutları`)
                     .setColor('Blue')
                     .setDescription('Aşağıda bu kategorideki komutlar listelenmiştir.');
 
-                if (commandFiles.length === 0) {
+                const fields = [];
+
+                // 1. Slash Komutlarını Ekle
+                commandFiles.forEach(file => {
+                    try {
+                        // Cache'den silerek taze veri al (Geliştirme aşamasında yararlı, prod için gereksiz olabilir ama zararı yok)
+                        const filePath = path.join(categoryPath, file);
+                        delete require.cache[require.resolve(filePath)];
+                        const cmd = require(filePath);
+
+                        if (cmd.data && cmd.data.name) {
+                            fields.push({
+                                name: `/${cmd.data.name}`,
+                                value: cmd.data.description || 'Açıklama yok.',
+                                inline: false
+                            });
+                        }
+                    } catch (err) {
+                        console.error(`Slash komutu yüklenirken hata: ${file}`, err);
+                    }
+                });
+
+                // 2. Prefix Komutlarını Ekle
+                prefixCommandFiles.forEach(file => {
+                    try {
+                        const filePath = path.join(prefixCommandsPath, file);
+                        delete require.cache[require.resolve(filePath)];
+                        const cmd = require(filePath);
+
+                        if (cmd.name) {
+                            fields.push({
+                                name: `r!${cmd.name}`,
+                                value: `${cmd.description || 'Açıklama yok.'} ${cmd.aliases ? `\n(Alternatif: ${cmd.aliases.map(a => `r!${a}`).join(', ')})` : ''}`,
+                                inline: false
+                            });
+                        }
+                    } catch (err) {
+                        console.error(`Prefix komutu yüklenirken hata: ${file}`, err);
+                    }
+                });
+
+                if (fields.length === 0) {
                     embed.addFields({ name: 'Komut Yok', value: 'Bu kategoride henüz komut bulunmuyor.' });
                 } else {
-                    const fields = commandFiles.map(file => {
-                        try {
-                            const cmd = require(path.join(categoryPath, file));
-                            // slash command data
-                            if (cmd.data && cmd.data.name) {
-                                return {
-                                    name: `/${cmd.data.name}`,
-                                    value: cmd.data.description || 'Açıklama yok.',
-                                    inline: false
-                                };
-                            }
-                        } catch (err) {
-                            console.error(`Komut yüklenirken hata: ${file}`, err);
-                        }
-                        return null;
-                    }).filter(Boolean); // null olanları temizle
-
                     // Embed limit koruması (25 field sınırı)
                     if (fields.length > 25) {
                         const remaining = fields.length - 25;
                         fields.splice(25);
-                        fields.push({ name: `...ve ${remaining} komut daha`, value: 'Daha fazla bilgi için diğer sayfaları kontrol edin (Bu özellik eklenebilir).' });
+                        fields.push({ name: `...ve ${remaining} komut daha`, value: 'Daha fazla bilgi için diğer sayfaları kontrol edin.' });
                     }
 
                     embed.addFields(fields);

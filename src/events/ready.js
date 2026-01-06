@@ -8,6 +8,7 @@ module.exports = {
     async execute(client) {
         console.log(`${client.user.tag} olarak giriş yapıldı!`);
         await client.handleCommands();
+        await client.handlePrefixCommands();
 
         const statusFile = path.join(__dirname, '../data/statusConfig.json');
 
