@@ -1,9 +1,39 @@
 const { Events, EmbedBuilder, AuditLogEvent } = require('discord.js');
 const { getGuildSettings } = require('../utils/settingsCache');
+const { db } = require('../firebase');
 
 module.exports = {
     name: Events.GuildMemberRemove,
     async execute(member) {
+        // --- LOG MEMBER LEAVE TO FIREBASE ---
+        try {
+            const guildRef = db.collection('guilds').doc(member.guild.id);
+            const doc = await guildRef.get();
+            let leftMembers = [];
+
+            if (doc.exists && doc.data().leftMembers) {
+                leftMembers = doc.data().leftMembers;
+            }
+
+            const userTag = member.user ? member.user.tag : 'Bilinmeyen Kullanıcı';
+            console.log(`[LOG] Saving left member to Firebase: ${userTag} (${member.id})`);
+
+            leftMembers.unshift({
+                id: member.id,
+                tag: userTag,
+                joinedAt: member.joinedTimestamp,
+                leftAt: Date.now()
+            });
+
+            // Son 20 kişiyi tutalım
+            if (leftMembers.length > 20) leftMembers = leftMembers.slice(0, 20);
+
+            await guildRef.set({ leftMembers }, { merge: true });
+        } catch (err) {
+            console.error('Leave log write error:', err);
+        }
+        // ---------------------------------
+
         try {
             const settings = await getGuildSettings(member.guild.id);
             const logs = settings?.logs;
