@@ -1,4 +1,4 @@
-const { SlashCommandBuilder, EmbedBuilder, ChannelType, ActionRowBuilder, StringSelectMenuBuilder, ComponentType } = require('discord.js');
+const { SlashCommandBuilder, EmbedBuilder, ChannelType, ActionRowBuilder, StringSelectMenuBuilder, ComponentType, ButtonBuilder, ButtonStyle } = require('discord.js');
 const { db } = require('../../firebase');
 
 module.exports = {
@@ -8,30 +8,23 @@ module.exports = {
     async execute(interaction) {
         const { guild } = interaction;
 
-        // Sunucu sahibini ve detayları tam çekelim
         if (!guild.available) return interaction.reply({ content: 'Sunucu bilgileri şu anda alınamıyor.', ephemeral: true });
 
         await guild.fetch();
         const owner = await guild.fetchOwner();
 
-        // --- Helper Function: General Info Embed ---
+        // --- Helper: General Info Embed ---
         const getGeneralEmbed = () => {
-            // Kanalları türlerine göre sayalım
             const channels = guild.channels.cache;
             const textChannels = channels.filter(c => c.type === ChannelType.GuildText).size;
             const voiceChannels = channels.filter(c => c.type === ChannelType.GuildVoice).size;
             const categories = channels.filter(c => c.type === ChannelType.GuildCategory).size;
 
-            // Üyeleri sayalım
             const totalMembers = guild.memberCount;
-            // Not: Cache üzerinden bot sayısını alıyoruz
             const botCount = guild.members.cache.filter(m => m.user.bot).size;
-            const humanCount = totalMembers - botCount; // Tahmini
 
-            // Tarih formatlama
             const createdAt = new Date(guild.createdAt).toLocaleDateString('tr-TR', { year: 'numeric', month: 'long', day: 'numeric', weekday: 'long' });
 
-            // Doğrulama seviyeleri (İngilizce -> Türkçe)
             const verificationLevels = {
                 0: 'Yok',
                 1: 'Düşük',
@@ -63,141 +56,210 @@ module.exports = {
             return embed;
         };
 
-        // --- Helper Function: Last Joined Embed ---
-        const getJoinedEmbed = async () => {
-            // 'Son Girenler' için tüm üyeleri çekmemiz gerekiyor.
-            // Discord API 'fetch({ limit: 20 })' ile en son gelenleri VERMEZ, rastgele verir.
-            // Bu yüzden önce tüm listeyi cache'e alıp (fetch) sonra sıralamalıyız.
-            try {
-                // Sadece cache'de olmayanları değil, hepsini refresh edelim ki sıralama doğru olsun.
-                await guild.members.fetch();
-            } catch (error) {
-                console.log('Member fetch failed or timed out:', error);
+        // --- Helper: Fetch Joined Data ---
+        const fetchJoinedMembers = async () => {
+            let joinedMembers = [];
+            let source = 'api'; // 'db' or 'api'
+
+            // 1. Firebase check
+            if (db) {
+                try {
+                    const doc = await db.collection('guilds').doc(guild.id).get();
+                    if (doc.exists && doc.data().joinedMembers) {
+                        joinedMembers = doc.data().joinedMembers;
+                        source = 'db';
+                    }
+                } catch (e) {
+                    console.error('Firebase fetching error:', e);
+                }
             }
 
-            // Cache artık dolu, sıralama yapabiliriz.
-            const members = guild.members.cache
-                .sort((a, b) => b.joinedTimestamp - a.joinedTimestamp)
-                .first(15);
+            // 2. Fallback to API if DB empty
+            if (joinedMembers.length === 0) {
+                try {
+                    await guild.members.fetch();
+                    const members = guild.members.cache
+                        .sort((a, b) => b.joinedTimestamp - a.joinedTimestamp)
+                        .first(50);
 
-            // Listeyi oluştur
-            const description = members.map((m, index) => {
-                return `\` ${index + 1}. \` **${m.user.tag}** (<@${m.id}>)\n   📅 <t:${Math.floor(m.joinedTimestamp / 1000)}:R>`;
-            }).join('\n');
-
-            return new EmbedBuilder()
-                .setTitle('📥 Son Katılan Üyeler (İlk 15)')
-                .setColor('Green')
-                .setDescription(description || 'Veri bulunamadı.')
-                .setTimestamp();
+                    joinedMembers = members.map(m => ({
+                        id: m.id,
+                        tag: m.user.tag,
+                        joinedAt: m.joinedTimestamp
+                    }));
+                    source = 'api';
+                } catch (error) {
+                    console.log('Member fetch failed:', error);
+                }
+            }
+            return { data: joinedMembers, source };
         };
 
-        // --- Helper Function: Last Left Embed ---
-        const getLeftEmbed = async () => {
-            if (!db) {
-                return new EmbedBuilder()
-                    .setTitle('Hata')
-                    .setDescription('Veritabanı bağlantısı sağlanamadığı için veri çekilemiyor. Lütfen bot sahibine ulaşın.')
-                    .setColor('Red');
-            }
-
+        // --- Helper: Fetch Left Data ---
+        const fetchLeftMembers = async () => {
             let leftMembers = [];
-            try {
-                const doc = await db.collection('guilds').doc(guild.id).get();
-                if (doc.exists && doc.data().leftMembers) {
-                    leftMembers = doc.data().leftMembers;
-                }
-            } catch (e) {
-                console.error('Firebase Error:', e);
-                return new EmbedBuilder()
-                    .setTitle('Data Hatası')
-                    .setDescription('Veri çekilirken bir hata oluştu.')
-                    .setColor('Red');
+            if (db) {
+                try {
+                    const doc = await db.collection('guilds').doc(guild.id).get();
+                    if (doc.exists && doc.data().leftMembers) {
+                        leftMembers = doc.data().leftMembers;
+                    }
+                } catch (e) { console.error(e); }
             }
+            return { data: leftMembers, source: 'db' };
+        };
 
-            const description = leftMembers.length > 0
-                ? leftMembers.map((m, index) => {
-                    return `\` ${index + 1}. \` **${m.tag}** (<@${m.id}>)\n   📅 <t:${Math.floor(m.leftAt / 1000)}:R>`;
+        // --- Helper: Generate List Embed (Paginated) ---
+        const generateListEmbed = (title, items, page, source, color = 'Green') => {
+            const itemsPerPage = 10;
+            const start = page * itemsPerPage;
+            const end = start + itemsPerPage;
+            const slice = items.slice(start, end);
+            const totalPages = Math.ceil(items.length / itemsPerPage) || 1;
+
+            const description = slice.length > 0
+                ? slice.map((m, index) => {
+                    // Check if this is a "Left Member" record (has leftAt)
+                    if (m.leftAt) {
+                        const leftTime = Math.floor(m.leftAt / 1000);
+                        const joinedTime = m.joinedAt ? Math.floor(m.joinedAt / 1000) : null;
+
+                        let line = `\` ${start + index + 1}. \` **${m.tag}** (<@${m.id}>)\n   📤 **Ayrıldı:** <t:${leftTime}:R>`;
+                        if (joinedTime) {
+                            line += ` | 📥 **Katılmıştı:** <t:${joinedTime}:D>`; // :D for short date, or :R for relative
+                        }
+                        return line;
+                    }
+
+                    // Fallback for "Joined Members"
+                    const timeKey = m.joinedAt;
+                    return `\` ${start + index + 1}. \` **${m.tag}** (<@${m.id}>)\n   📥 **Katıldı:** <t:${Math.floor(timeKey / 1000)}:R>`;
                 }).join('\n')
-                : 'Bot kayıtlarına göre henüz ayrılan bir üye yok. (Sistem yeni aktif edildi)';
+                : 'Veri bulunamadı.';
+
+            const footerText = source === 'db'
+                ? `Sayfa ${page + 1} / ${totalPages} • Veriler veritabanından çekildi.`
+                : `Sayfa ${page + 1} / ${totalPages} • Veriler anlık sunucu listesinden çekildi.`;
 
             return new EmbedBuilder()
-                .setTitle('📤 Son Ayrılan Üyeler (Kayıtlı)')
-                .setColor('Red')
+                .setTitle(title)
+                .setColor(color)
                 .setDescription(description)
-                .setFooter({ text: 'Not: Sadece bot aktifken ve veritabanı bağlıyken ayrılanlar kaydedilir.' })
+                .setFooter({ text: footerText })
                 .setTimestamp();
         };
 
+        // --- Helper: Pagination Buttons ---
+        const getPaginationButtons = (page, totalItems) => {
+            const itemsPerPage = 10;
+            const totalPages = Math.ceil(totalItems / itemsPerPage) || 1;
 
-        // --- Create Menu ---
-        const menu = new StringSelectMenuBuilder()
-            .setCustomId('serverinfo_menu')
-            .setPlaceholder('Görüntülemek istediğiniz bilgiyi seçin...')
-            .addOptions(
-                {
-                    label: 'Genel Bilgiler',
-                    description: 'Sunucu hakkında genel istatistikleri gösterir.',
-                    value: 'general',
-                    emoji: 'ℹ️'
-                },
-                {
-                    label: 'Son Girenler',
-                    description: 'Sunucuya en son katılan üyeleri listeler.',
-                    value: 'joined',
-                    emoji: '📥'
-                },
-                {
-                    label: 'Son Çıkanlar',
-                    description: 'Sunucudan en son ayrılan üyeleri listeler.',
-                    value: 'left',
-                    emoji: '📤'
-                },
-                {
-                    label: 'Kapat',
-                    description: 'Menüyü ve mesajı kapatır.',
-                    value: 'close',
-                    emoji: '✖️'
-                }
-            );
+            const prevButton = new ButtonBuilder()
+                .setCustomId('prev_page')
+                .setEmoji('⬅️')
+                .setStyle(ButtonStyle.Secondary)
+                .setDisabled(page === 0);
 
-        const row = new ActionRowBuilder().addComponents(menu);
+            const nextButton = new ButtonBuilder()
+                .setCustomId('next_page')
+                .setEmoji('➡️')
+                .setStyle(ButtonStyle.Secondary)
+                .setDisabled(page >= totalPages - 1);
+
+            return new ActionRowBuilder().addComponents(prevButton, nextButton);
+        };
+
+        // --- Menu Component ---
+        const getMenuRow = () => {
+            const menu = new StringSelectMenuBuilder()
+                .setCustomId('serverinfo_menu')
+                .setPlaceholder('Görüntülemek istediğiniz bilgiyi seçin...')
+                .addOptions(
+                    { label: 'Genel Bilgiler', value: 'general', emoji: 'ℹ️' },
+                    { label: 'Son Girenler', value: 'joined', emoji: '📥' },
+                    { label: 'Son Çıkanlar', value: 'left', emoji: '📤' },
+                    { label: 'Kapat', value: 'close', emoji: '✖️' }
+                );
+            return new ActionRowBuilder().addComponents(menu);
+        };
+
+        // --- Init ---
+        // Varsayılan: Genel Bilgiler
+        let currentView = 'general';
+        let currentPage = 0;
+        let currentData = [];
+        let currentSource = 'api';
 
         const initialEmbed = getGeneralEmbed();
-        const response = await interaction.reply({ embeds: [initialEmbed], components: [row], fetchReply: true });
+        const menuRow = getMenuRow();
+        const response = await interaction.reply({ embeds: [initialEmbed], components: [menuRow], fetchReply: true });
 
         // --- Collector ---
-        const collector = response.createMessageComponentCollector({ componentType: ComponentType.StringSelect, time: 600000 }); // 10 dakika
+        const collector = response.createMessageComponentCollector({ time: 600000 });
 
         collector.on('collect', async i => {
             if (i.user.id !== interaction.user.id) {
                 return i.reply({ content: 'Bu menüyü sadece komutu kullanan kişi kullanabilir.', ephemeral: true });
             }
 
-            const selection = i.values[0];
-            let newEmbed;
+            // Handle Menu Selection
+            if (i.isStringSelectMenu()) {
+                const selection = i.values[0];
+                await i.deferUpdate();
 
-            await i.deferUpdate(); // Cevap verildiğini belirt
+                if (selection === 'close') {
+                    await i.message.delete();
+                    return;
+                }
 
-            if (selection === 'close') {
-                await i.message.delete();
-                return;
+                currentView = selection;
+                currentPage = 0; // Reset page on view switch
+
+                if (currentView === 'general') {
+                    await i.editReply({ embeds: [getGeneralEmbed()], components: [menuRow] });
+                }
+                else if (currentView === 'joined') {
+                    const res = await fetchJoinedMembers();
+                    currentData = res.data;
+                    currentSource = res.source;
+                    const embed = generateListEmbed('📥 Son Katılan Üyeler', currentData, currentPage, currentSource, 'Green');
+                    const buttons = getPaginationButtons(currentPage, currentData.length);
+                    await i.editReply({ embeds: [embed], components: [menuRow, buttons] });
+                }
+                else if (currentView === 'left') {
+                    const res = await fetchLeftMembers();
+                    currentData = res.data;
+                    currentSource = res.source;
+                    const embed = generateListEmbed('📤 Son Ayrılan Üyeler', currentData, currentPage, currentSource, 'Red');
+                    const buttons = getPaginationButtons(currentPage, currentData.length);
+                    await i.editReply({ embeds: [embed], components: [menuRow, buttons] });
+                }
             }
 
-            if (selection === 'general') {
-                newEmbed = getGeneralEmbed();
-            } else if (selection === 'joined') {
-                newEmbed = await getJoinedEmbed();
-            } else if (selection === 'left') {
-                newEmbed = await getLeftEmbed();
-            }
+            // Handle Buttons
+            if (i.isButton()) {
+                await i.deferUpdate();
+                if (i.customId === 'prev_page') {
+                    if (currentPage > 0) currentPage--;
+                } else if (i.customId === 'next_page') {
+                    const totalPages = Math.ceil(currentData.length / 10);
+                    if (currentPage < totalPages - 1) currentPage++;
+                }
 
-            await i.editReply({ embeds: [newEmbed], components: [row] });
+                let embed;
+                if (currentView === 'joined') {
+                    embed = generateListEmbed('📥 Son Katılan Üyeler', currentData, currentPage, currentSource, 'Green');
+                } else {
+                    embed = generateListEmbed('📤 Son Ayrılan Üyeler', currentData, currentPage, currentSource, 'Red');
+                }
+
+                const buttons = getPaginationButtons(currentPage, currentData.length);
+                await i.editReply({ embeds: [embed], components: [menuRow, buttons] });
+            }
         });
 
         collector.on('end', () => {
-            // Süre bitince menüyü devre dışı bırak
-            const disabledMenu = StringSelectMenuBuilder.from(menu).setDisabled(true);
+            const disabledMenu = StringSelectMenuBuilder.from(getMenuRow().components[0]).setDisabled(true);
             const disabledRow = new ActionRowBuilder().addComponents(disabledMenu);
             interaction.editReply({ components: [disabledRow] }).catch(() => { });
         });

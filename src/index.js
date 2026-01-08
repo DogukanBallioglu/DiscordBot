@@ -22,5 +22,13 @@ for (const file of functionFiles) {
 }
 
 client.handleEvents();
-
 client.login(process.env.DISCORD_TOKEN);
+
+// --- Global Error Handlers ---
+process.on('unhandledRejection', (reason, p) => {
+    console.error('Unhandled Rejection at:', p, 'reason:', reason);
+});
+
+process.on('uncaughtException', (err) => {
+    console.error('Uncaught Exception:', err);
+});

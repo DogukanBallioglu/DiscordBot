@@ -58,5 +58,31 @@ module.exports = {
         } catch (e) {
             console.error('Member Log hatası:', e);
         }
+
+        // --- SAVE NEW MEMBER TO FIREBASE (LAST JOINED) ---
+        try {
+            const guildRef = db.collection('guilds').doc(member.guild.id);
+            const doc = await guildRef.get();
+            let joinedMembers = [];
+
+            if (doc.exists && doc.data().joinedMembers) {
+                joinedMembers = doc.data().joinedMembers;
+            }
+
+            const userTag = member.user ? member.user.tag : 'Bilinmeyen Kullanıcı';
+
+            joinedMembers.unshift({
+                id: member.id,
+                tag: userTag,
+                joinedAt: Date.now()
+            });
+
+            // Son 25 kişiyi tutalım
+            if (joinedMembers.length > 25) joinedMembers = joinedMembers.slice(0, 25);
+
+            await guildRef.set({ joinedMembers }, { merge: true });
+        } catch (err) {
+            console.error('Joined log write error:', err);
+        }
     },
 };
