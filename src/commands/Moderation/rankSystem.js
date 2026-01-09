@@ -15,6 +15,8 @@ const {
     ChannelType,
     MessageFlags
 } = require('discord.js');
+const fs = require('fs');
+const path = require('path');
 const { getGuildSettings, updateGuildSettings } = require('../../utils/settingsCache');
 
 module.exports = {
@@ -34,6 +36,18 @@ module.exports = {
 
         await interaction.deferReply({ flags: MessageFlags.Ephemeral });
 
+        // Emojiler (Yerel Tanımlama)
+        const emojis = {
+            success: '<:reva_yes:1458949796806000771>',
+            error: '<:reva_no:1458949780809191695>',
+            trophy: '🏆',
+            message: '💬',
+            gift: '🎁',
+            bolt: '⚡',
+            add: '<:reva_add:1458954045082566778>',
+            edit: '<:reva_edit:1458958102098608301>'
+        };
+
         // Ayarları Çek
         let settings = await getGuildSettings(interaction.guild.id);
         let rankConfig = settings?.rank || {
@@ -42,19 +56,19 @@ module.exports = {
 
         // --- GÖRSEL OLUŞTURUCULAR ---
 
-        const getStatusEmoji = (status) => status ? '✅' : '❌';
+        const getStatusEmoji = (status) => status ? (emojis.success || '✅') : (emojis.error || '❌');
 
         const generateEmbed = () => {
             const embed = new EmbedBuilder()
-                .setTitle(`🏆 ${interaction.guild.name} Rank Sistemi`)
+                .setTitle(`${emojis.trophy || '🏆'} ${interaction.guild.name} Rank Sistemi`)
                 .setDescription('Sunucunuzdaki seviye sistemini buradan detaylıca yönetebilirsiniz.')
                 .setColor('Gold')
                 .addFields(
-                    { name: 'Durum', value: rankConfig.enabled ? '✅ **Aktif**' : '❌ **Kapalı**', inline: true },
+                    { name: 'Durum', value: rankConfig.enabled ? `${emojis.success || '✅'} **Aktif**` : `${emojis.error || '❌'} **Kapalı**`, inline: true },
                     { name: 'XP Oranı (Min-Max)', value: `${rankConfig.minXp} - ${rankConfig.maxXp}`, inline: true },
                     { name: 'Cooldown (Saniye)', value: `${rankConfig.cooldown}sn`, inline: true },
-                    { name: 'Level Duyurusu', value: rankConfig.announceMessage ? '✅ Açık' : '❌ Kapalı', inline: true },
-                    { name: 'Duyuru Kanalı', value: rankConfig.announceChannel ? `<#${rankConfig.announceChannel}>` : '💬 Mesajın Yazıldığı Kanal', inline: true }
+                    { name: 'Level Duyurusu', value: rankConfig.announceMessage ? `${emojis.success || '✅'} Açık` : `${emojis.error || '❌'} Kapalı`, inline: true },
+                    { name: 'Duyuru Kanalı', value: rankConfig.announceChannel ? `<#${rankConfig.announceChannel}>` : `${emojis.message || '💬'} Mesajın Yazıldığı Kanal`, inline: true }
                 );
 
             // Rol Ödülleri Listesi
@@ -64,7 +78,7 @@ module.exports = {
                 const sortedRewards = [...rankConfig.roleRewards].sort((a, b) => a.level - b.level);
                 rolesText = sortedRewards.map(r => `**Level ${r.level}:** <@&${r.roleId}>`).join('\n');
             }
-            embed.addFields({ name: '🎁 Rol Ödülleri', value: rolesText });
+            embed.addFields({ name: `${emojis.gift || '🎁'} Rol Ödülleri`, value: rolesText });
 
             return embed;
         };
@@ -82,7 +96,7 @@ module.exports = {
                     .setCustomId('edit_xp')
                     .setLabel('XP Ayarları')
                     .setStyle(ButtonStyle.Primary)
-                    .setEmoji('⚡'),
+                    .setEmoji(emojis.bolt || '⚡'),
                 new ButtonBuilder()
                     .setCustomId('toggle_announce')
                     .setLabel(`Duyuru: ${rankConfig.announceMessage ? 'Açık' : 'Kapalı'}`)
@@ -109,7 +123,7 @@ module.exports = {
                         label: `Level ${r.level} Ödülü`,
                         description: `Level ${r.level} olana verilen rolü düzenle/sil`,
                         value: `manage_reward_${r.level}`,
-                        emoji: '🎁'
+                        emoji: emojis.gift || '🎁'
                     }));
 
                 rows.push(new ActionRowBuilder().addComponents(
@@ -126,7 +140,7 @@ module.exports = {
                     .setCustomId('add_reward_start')
                     .setLabel('Yeni Rol Ödülü Ekle')
                     .setStyle(ButtonStyle.Success)
-                    .setEmoji('➕'),
+                    .setEmoji(emojis.add || '➕'),
                 new ButtonBuilder()
                     .setCustomId('clear_rewards')
                     .setLabel('Tüm Ödülleri Sıfırla')
@@ -305,7 +319,7 @@ module.exports = {
 
                     await updateGuildSettings(interaction.guild.id, { rank: rankConfig });
 
-                    await roleSelection.update({ content: `✅ **Level ${level}** için <@&${roleId}> rolü ayarlandı!`, components: [] });
+                    await roleSelection.update({ content: `${emojis.success || '✅'} **Level ${level}** için <@&${roleId}> rolü ayarlandı!`, components: [] });
 
                     // Ana paneli de güncelle
                     await interaction.editReply({ embeds: [generateEmbed()], components: generateComponents() });
@@ -326,7 +340,7 @@ module.exports = {
                 }
 
                 const detailEmbed = new EmbedBuilder()
-                    .setTitle(`🛠️ Level ${level} Ödül Düzenleme`)
+                    .setTitle(`${emojis.edit || '🛠️'} Level ${level} Ödül Düzenleme`)
                     .setDescription(`Bu seviye için ayarlanan mevcut rol: <@&${reward.roleId}>`)
                     .setColor('Blue');
 
@@ -369,8 +383,8 @@ module.exports = {
                 await updateGuildSettings(interaction.guild.id, { rank: rankConfig });
 
                 const detailEmbed = new EmbedBuilder()
-                    .setTitle(`🛠️ Level ${level} Ödül Düzenleme`)
-                    .setDescription(`✅ **Güncellendi!**\nBu seviye için yeni rol: <@&${newRoleId}>`)
+                    .setTitle(`${emojis.edit || '🛠️'} Level ${level} Ödül Düzenleme`)
+                    .setDescription(`${emojis.success || '✅'} **Güncellendi!**\nBu seviye için yeni rol: <@&${newRoleId}>`)
                     .setColor('Green');
 
                 const detailRows = [];

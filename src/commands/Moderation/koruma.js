@@ -1,5 +1,7 @@
 const { SlashCommandBuilder, EmbedBuilder, ActionRowBuilder, StringSelectMenuBuilder, RoleSelectMenuBuilder, ChannelSelectMenuBuilder, ButtonBuilder, ButtonStyle, PermissionsBitField, ComponentType, MessageFlags, ChannelType } = require('discord.js');
 const { getGuildSettings, updateGuildSettings } = require('../../utils/settingsCache');
+const fs = require('fs');
+const path = require('path');
 
 module.exports = {
     data: new SlashCommandBuilder()
@@ -8,6 +10,24 @@ module.exports = {
         .setDefaultMemberPermissions(PermissionsBitField.Flags.Administrator),
 
     async execute(interaction) {
+        // Emojiler (Yerel Tanımlama)
+        const emojis = {
+            moderation: '🛡️',
+            success: '<:reva_yes:1458949796806000771>',
+            error: '<:reva_no:1458949780809191695>',
+            cursing: '<:reva_number:1458961041621909635>',
+            link: '<:reva_number:1458961041621909635>',
+            advertisement: '<:reva_number:1458961041621909635>',
+            spam: '<:reva_number:1458961041621909635>',
+            log: '📜',
+            hammer: '🔨',
+            note: '📝',
+            police: '👮',
+            envelope: '📨',
+            members: '<:reva_members:1458961065403744296>',
+            warning: '<:reva_warning:1458973921603883073>'
+        };
+
         if (!interaction.guild) return interaction.reply({ content: 'Bu komut sadece sunucularda kullanılabilir.', flags: MessageFlags.Ephemeral });
 
         if (!interaction.member.permissions.has(PermissionsBitField.Flags.Administrator) && interaction.user.id !== process.env.OWNER_ID) {
@@ -50,16 +70,22 @@ module.exports = {
 
         // Emojiler
         const EMOJIS = {
-            shield: '🛡️',
-            check: '✅',
-            cross: '❌',
-            badWords: '🤬',
-            links: '🔗',
-            ads: '📢',
-            spam: '💬',
-            logs: '📜',
-            hammer: '🔨'
+            shield: emojis.moderation || '🛡️',
+            check: emojis.success || '✅',
+            cross: emojis.error || '❌',
+            badWords: emojis.cursing || '🤬',
+            links: emojis.link || '🔗',
+            ads: emojis.advertisement || '📢',
+            spam: emojis.spam || '💬',
+            logs: emojis.log || '📜',
+            hammer: emojis.hammer || '🔨'
         };
+
+        function getEmojiId(emoji) {
+            if (!emoji) return null;
+            const match = emoji.match(/<a?:.+:(\d+)>/);
+            return match ? match[1] : emoji;
+        }
 
         // Helper: Logların herhangi biri açık mı?
         const inputsAreActive = (l) => l.channelLog || l.roleLog || l.messageLog || l.memberLog || l.voiceLog || l.penaltyLog;
@@ -70,11 +96,11 @@ module.exports = {
                 .setTitle(`${EMOJIS.shield} ${interaction.guild.name} Koruma Paneli`)
                 .setDescription('Aşağıdaki menüden yönetmek istediğiniz koruma sistemini seçin.')
                 .addFields(
-                    { name: `${EMOJIS.badWords} Küfür Koruması`, value: guard.badWords.enabled ? `${EMOJIS.check} Aktif` : `${EMOJIS.cross} Kapalı`, inline: true },
-                    { name: `${EMOJIS.links} Link Koruması`, value: guard.links.enabled ? `${EMOJIS.check} Aktif` : `${EMOJIS.cross} Kapalı`, inline: true },
-                    { name: `${EMOJIS.ads} Reklam Koruması`, value: guard.ads.enabled ? `${EMOJIS.check} Aktif` : `${EMOJIS.cross} Kapalı`, inline: true },
-                    { name: `${EMOJIS.spam} Spam Koruması`, value: guard.spam.enabled ? `${EMOJIS.check} Aktif` : `${EMOJIS.cross} Kapalı`, inline: true },
-                    { name: `${EMOJIS.logs} Log Sistemi`, value: logs.channelId ? (inputsAreActive(logs) ? `${EMOJIS.check} Aktif` : '⚠️ Kanal Var, Log Seçilmedi') : `${EMOJIS.cross} Kapalı`, inline: false }
+                    { name: `Küfür Koruması`, value: guard.badWords.enabled ? `${EMOJIS.check} Aktif` : `${EMOJIS.cross} Kapalı`, inline: true },
+                    { name: `Link Koruması`, value: guard.links.enabled ? `${EMOJIS.check} Aktif` : `${EMOJIS.cross} Kapalı`, inline: true },
+                    { name: `Reklam Koruması`, value: guard.ads.enabled ? `${EMOJIS.check} Aktif` : `${EMOJIS.cross} Kapalı`, inline: true },
+                    { name: `Spam Koruması`, value: guard.spam.enabled ? `${EMOJIS.check} Aktif` : `${EMOJIS.cross} Kapalı`, inline: true },
+                    { name: `Log Sistemi`, value: logs.channelId ? (inputsAreActive(logs) ? `${EMOJIS.check} Aktif` : '⚠️ Kanal Var, Log Seçilmedi') : `${EMOJIS.cross} Kapalı`, inline: false }
                 )
                 .setColor('Blue')
                 .setFooter({ text: 'Detaylı ayarlar için menüyü kullanın.' });
@@ -85,11 +111,11 @@ module.exports = {
                         .setCustomId('main_select')
                         .setPlaceholder('Bir koruma sistemi seçin...')
                         .addOptions([
-                            { label: 'Küfür Koruması', value: 'badWords', emoji: '🤬' },
-                            { label: 'Link Koruması', value: 'links', emoji: '🔗' },
-                            { label: 'Reklam Koruması', value: 'ads', emoji: '📢' },
-                            { label: 'Spam Koruması', value: 'spam', emoji: '💬' },
-                            { label: 'Log Ayarları', value: 'logs', emoji: '📜' }
+                            { label: 'Küfür Koruması', value: 'badWords', emoji: getEmojiId(emojis.cursing || '🤬') },
+                            { label: 'Link Koruması', value: 'links', emoji: getEmojiId(emojis.link || '🔗') },
+                            { label: 'Reklam Koruması', value: 'ads', emoji: getEmojiId(emojis.advertisement || '📢') },
+                            { label: 'Spam Koruması', value: 'spam', emoji: getEmojiId(emojis.spam || '💬') },
+                            { label: 'Log Ayarları', value: 'logs', emoji: getEmojiId(emojis.log || '📜') }
                         ])
                 );
 
@@ -131,11 +157,11 @@ Log Sistemi, sunucudaki önemli olayları kayıt altına alır.
                         .setMinValues(0)
                         .setMaxValues(5)
                         .addOptions([
-                            { label: 'Kanal Olayları (Oluşturma/Silme/Güncelleme)', value: 'channelLog', emoji: '📝', default: logs.channelLog },
-                            { label: 'Rol Olayları (Oluşturma/Silme/Güncelleme)', value: 'roleLog', emoji: '👮', default: logs.roleLog },
-                            { label: 'Mesaj Olayları (Silme/Düzenleme)', value: 'messageLog', emoji: '📨', default: logs.messageLog },
-                            { label: 'Üye Olayları (Giriş/Çıkış/Yasaklama)', value: 'memberLog', emoji: '👥', default: logs.memberLog },
-                            { label: 'Ceza Logları (Özel Ban Sistemi vb.)', value: 'penaltyLog', emoji: '🔨', default: logs.penaltyLog }
+                            { label: 'Kanal Olayları (Oluşturma/Silme/Güncelleme)', value: 'channelLog', emoji: getEmojiId(emojis.note || '📝'), default: logs.channelLog },
+                            { label: 'Rol Olayları (Oluşturma/Silme/Güncelleme)', value: 'roleLog', emoji: getEmojiId(emojis.police || '👮'), default: logs.roleLog },
+                            { label: 'Mesaj Olayları (Silme/Düzenleme)', value: 'messageLog', emoji: getEmojiId(emojis.envelope || '📨'), default: logs.messageLog },
+                            { label: 'Üye Olayları (Giriş/Çıkış/Yasaklama)', value: 'memberLog', emoji: getEmojiId(emojis.members || '👥'), default: logs.memberLog },
+                            { label: 'Ceza Logları (Özel Ban Sistemi vb.)', value: 'penaltyLog', emoji: getEmojiId(emojis.hammer || '🔨'), default: logs.penaltyLog }
                         ])
                 );
 
@@ -180,7 +206,7 @@ Log Sistemi, sunucudaki önemli olayları kayıt altına alır.
             };
 
             const embed = new EmbedBuilder()
-                .setTitle(`🛠️ ${titles[type]} Ayarları`)
+                .setTitle(`${emojis.settings || '🛠️'} ${titles[type]} Ayarları`)
                 .setDescription(`
 **Durum:** ${config.enabled ? `${EMOJIS.check} Aktif` : `${EMOJIS.cross} Kapalı`}
 **Uyarı Mesajı:** ${config.warningEnabled ? `${EMOJIS.check} Açık` : `${EMOJIS.cross} Kapalı`}
@@ -240,7 +266,7 @@ Bu korumadan etkilenmeyecek rolleri ve kanalları aşağıdan seçebilirsiniz.`)
                         .setCustomId(`toggle_warn_${type}`)
                         .setLabel(config.warningEnabled ? 'Uyarıyı Kapat' : 'Uyarıyı Aç')
                         .setStyle(config.warningEnabled ? ButtonStyle.Secondary : ButtonStyle.Primary)
-                        .setEmoji('⚠️'),
+                        .setEmoji(getEmojiId(emojis.warning || '⚠️')),
                     new ButtonBuilder()
                         .setCustomId('back_main')
                         .setLabel('Geri Dön')

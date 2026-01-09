@@ -1,10 +1,16 @@
 const { Events, AuditLogEvent, EmbedBuilder } = require('discord.js');
 const { getGuildSettings } = require('../utils/settingsCache');
+const fs = require('fs');
+const path = require('path');
 
 module.exports = {
     name: Events.GuildRoleDelete,
     async execute(role) {
         if (!role.guild) return;
+
+        const emojis = {
+            police: '👮'
+        };
 
         const settings = await getGuildSettings(role.guild.id);
         const logs = settings?.logs;
@@ -30,7 +36,7 @@ module.exports = {
         }
 
         const embed = new EmbedBuilder()
-            .setTitle('👮 Rol Silindi')
+            .setTitle(`${emojis.police || '👮'} Rol Silindi`)
             .setColor('Red')
             .addFields(
                 { name: 'Rol Adı', value: role.name, inline: true },

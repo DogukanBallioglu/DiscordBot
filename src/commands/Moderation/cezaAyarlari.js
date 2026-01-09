@@ -1,6 +1,8 @@
 const { SlashCommandBuilder, EmbedBuilder, ActionRowBuilder, StringSelectMenuBuilder, RoleSelectMenuBuilder, ButtonBuilder, ButtonStyle, ComponentType, ModalBuilder, TextInputBuilder, TextInputStyle, PermissionsBitField } = require('discord.js');
 const { getGuildSettings, updateGuildSettings } = require('../../utils/settingsCache');
 const { db } = require('../../firebase');
+const fs = require('fs');
+const path = require('path');
 
 module.exports = {
     data: new SlashCommandBuilder()
@@ -9,10 +11,29 @@ module.exports = {
         .setDefaultMemberPermissions(PermissionsBitField.Flags.Administrator),
 
     async execute(interaction) {
+        // Emojiler (Yerel Tanımlama)
+        const emojis = {
+            error: '<:reva_no:1458949780809191695>',
+            hammer: '🔨',
+            number: '<:reva_number:1458961041621909635>',
+            calendar: '<:reva_calendar:1458961051113488384>',
+            members: '<:reva_members:1458961065403744296>',
+            trash: '<:reva_trash:1458958507268247764>',
+            back: '<:reva_back:1458957137278406824>'
+        };
+
+        function getEmojiId(emoji) {
+            if (!emoji) return null;
+            const match = emoji.match(/<a?:.+:(\d+)>/);
+            return match ? match[1] : emoji;
+        }
+
         // Güvenlik Kontrolü: Sadece Yöneticiler
         if (!interaction.member.permissions.has(PermissionsBitField.Flags.Administrator) && interaction.user.id !== process.env.OWNER_ID) {
-            return interaction.reply({ content: '❌ Bu komutu sadece yöneticiler kullanabilir.', ephemeral: true });
+            return interaction.reply({ content: `${emojis.error || '❌'} Bu komutu sadece yöneticiler kullanabilir.`, ephemeral: true });
         }
+
+
 
         // Yardımcı fonksiyon: Veritabanı verisini al
         const reloadSettings = async () => {
@@ -25,7 +46,7 @@ module.exports = {
         // 1. Ana Menü
         const showMainMenu = async (targetInteraction) => {
             const embed = new EmbedBuilder()
-                .setTitle('⚖️ Ceza Ayarları Yönetimi')
+                .setTitle(`${emojis.scales || '⚖️'} Ceza Ayarları Yönetimi`)
                 .setDescription('Lütfen yapılandırmak istediğiniz sistemi aşağıdaki menüden seçin.')
                 .setColor('Blurple')
                 .setFooter({ text: 'Reva Moderasyon Sistemi' });
@@ -38,7 +59,7 @@ module.exports = {
                         label: 'Ban Ayarları',
                         description: 'Ban atma yetkisi ve limitlerini ayarla.',
                         value: 'ban_settings',
-                        emoji: '🔨'
+                        emoji: getEmojiId(emojis.hammer || '🔨')
                     }
                     // Gelecekte Kick, Mute vb. eklenebilir.
                 );
@@ -61,7 +82,7 @@ module.exports = {
             const days = currentSettings.resetIntervalDays || 'Belirlenmemiş';
 
             const embed = new EmbedBuilder()
-                .setTitle('🔨 Ban Ayarları')
+                .setTitle(`${emojis.hammer || '🔨'} Ban Ayarları`)
                 .setDescription('Belirli bir rol için ban atma hakkı ve süresini buradan ayarlayabilirsiniz.')
                 .setColor('Red')
                 .addFields(
@@ -81,31 +102,31 @@ module.exports = {
                 .setCustomId('set_ban_limit')
                 .setLabel('Limit Ayarla')
                 .setStyle(ButtonStyle.Primary)
-                .setEmoji('🔢');
+                .setEmoji(getEmojiId(emojis.number || '🔢'));
 
             const dayBtn = new ButtonBuilder()
                 .setCustomId('set_ban_days')
                 .setLabel('Gün Süresi Ayarla')
                 .setStyle(ButtonStyle.Primary)
-                .setEmoji('📅');
+                .setEmoji(getEmojiId(emojis.calendar || '📅'));
 
             const manageUsersBtn = new ButtonBuilder()
                 .setCustomId('manage_ban_users')
                 .setLabel('Yetkilileri Yönet')
                 .setStyle(ButtonStyle.Success)
-                .setEmoji('👥');
+                .setEmoji(getEmojiId(emojis.members || '👥'));
 
             const resetBtn = new ButtonBuilder()
                 .setCustomId('reset_ban_settings')
                 .setLabel('Ayarları Sıfırla')
                 .setStyle(ButtonStyle.Danger)
-                .setEmoji('🗑️');
+                .setEmoji(getEmojiId(emojis.trash || '🗑️'));
 
             const backBtn = new ButtonBuilder()
                 .setCustomId('back_to_main')
                 .setLabel('Geri Dön')
                 .setStyle(ButtonStyle.Secondary)
-                .setEmoji('⬅️');
+                .setEmoji(getEmojiId(emojis.back || '⬅️'));
 
             const row1 = new ActionRowBuilder().addComponents(roleSelect);
             const row2 = new ActionRowBuilder().addComponents(limitBtn, dayBtn, manageUsersBtn);
@@ -135,7 +156,7 @@ module.exports = {
             const limit = currentSettings.limit || 0;
 
             if (!roleId) {
-                return targetInteraction.editReply({ content: '⚠️ Önce yetkili bir rol belirlemelisiniz!', embeds: [], components: [] });
+                return targetInteraction.editReply({ content: `${emojis.warning || '⚠️'} Önce yetkili bir rol belirlemelisiniz!`, embeds: [], components: [] });
             }
 
             // Rol üyelerini çek (Cache + Fetch)
@@ -143,7 +164,7 @@ module.exports = {
             // Önce rolü fetchleyelim (gerekirse), sonra memberları.
             const role = await targetInteraction.guild.roles.fetch(roleId);
             if (!role) {
-                return targetInteraction.editReply({ content: '⚠️ Belirlenen role erişilemiyor (silinmiş olabilir).', embeds: [], components: [] });
+                return targetInteraction.editReply({ content: `${emojis.warning || '⚠️'} Belirlenen role erişilemiyor (silinmiş olabilir).`, embeds: [], components: [] });
             }
 
             // Tüm üyeleri fetchle ki role.members dolsun (Rate Limit Koruması)
@@ -159,7 +180,7 @@ module.exports = {
             const members = Array.from(role.members.values()).slice(0, 25);
 
             if (members.length === 0) {
-                return targetInteraction.editReply({ content: '⚠️ Bu role sahip hiç üye bulunamadı.', embeds: [], components: [] });
+                return targetInteraction.editReply({ content: `${emojis.warning || '⚠️'} Bu role sahip hiç üye bulunamadı.`, embeds: [], components: [] });
             }
 
             // DB'den verilerini çek
@@ -176,7 +197,7 @@ module.exports = {
             }));
 
             const embed = new EmbedBuilder()
-                .setTitle('👥 Yetkili Ban Durumları')
+                .setTitle(`${emojis.members || '👥'} Yetkili Ban Durumları`)
                 .setDescription('Aşağıdaki listeden bir üyeyi seçerek ban hakkını sıfırlayabilirsiniz.')
                 .setColor('Green')
                 .setFooter({ text: 'Sadece ilk 25 üye gösterilmektedir.' });
@@ -189,7 +210,7 @@ module.exports = {
                         label: m.tag.substring(0, 99), // Discord limit
                         description: `Kullanılan: ${m.count} / ${limit}`,
                         value: m.id,
-                        emoji: '👤'
+                        emoji: emojis.avatar || '👤'
                     }))
                 );
 
@@ -197,7 +218,7 @@ module.exports = {
                 .setCustomId('back_to_ban_settings')
                 .setLabel('Geri Dön')
                 .setStyle(ButtonStyle.Secondary)
-                .setEmoji('⬅️');
+                .setEmoji(getEmojiId(emojis.back || '⬅️'));
 
             const row1 = new ActionRowBuilder().addComponents(selectMenu);
             const row2 = new ActionRowBuilder().addComponents(backBtn);
@@ -251,7 +272,7 @@ module.exports = {
                 const data = doc.exists ? doc.data() : { banCount: 0 };
 
                 if (!data.banCount || data.banCount === 0) {
-                    await i.followUp({ content: '⚠️ Bu kullanıcının zaten kullanılmış veya sıfırlanacak bir ban hakkı yok.', ephemeral: true });
+                    await i.followUp({ content: `${emojis.warning || '⚠️'} Bu kullanıcının zaten kullanılmış veya sıfırlanacak bir ban hakkı yok.`, ephemeral: true });
                     // Listeyi yenilemeye gerek yok ama seçim kilidini kaldırmak için tekrar render edebiliriz
                     await showUserList(i, banSettings);
                     return;
@@ -263,7 +284,7 @@ module.exports = {
                     lastBanReset: Date.now()
                 }, { merge: true });
 
-                await i.followUp({ content: `✅ <@${targetUserId}> kullanıcısının ban hakkı sıfırlandı!`, ephemeral: true });
+                await i.followUp({ content: `${emojis.success || '✅'} <@${targetUserId}> kullanıcısının ban hakkı sıfırlandı!`, ephemeral: true });
 
                 // Listeyi güncelle
                 await showUserList(i, banSettings);
@@ -289,7 +310,6 @@ module.exports = {
                 await showBanSettings(i, banSettings);
             }
             else if (i.customId === 'set_ban_limit') {
-                // Modal Aç (KESİNLİKLE await reloadSettings() YAPMA)
                 const modal = new ModalBuilder()
                     .setCustomId('ban_limit_modal')
                     .setTitle('Ban Limiti Ayarla');
@@ -307,9 +327,32 @@ module.exports = {
                 modal.addComponents(row);
 
                 await i.showModal(modal);
+
+                // Modal Submit Bekle
+                try {
+                    const submitted = await i.awaitModalSubmit({
+                        time: 60000,
+                        filter: (m) => m.customId === 'ban_limit_modal' && m.user.id === interaction.user.id
+                    });
+
+                    const value = parseInt(submitted.fields.getTextInputValue('limit_input'));
+                    if (isNaN(value) || value < 1) {
+                        return submitted.reply({ content: `${emojis.error || '❌'} Lütfen geçerli bir sayı girin.`, ephemeral: true });
+                    }
+
+                    // Ayarları güncelle
+                    const banSettings = await reloadSettings(); // Güncel ayarı çek
+                    banSettings.limit = value;
+                    await updateGuildSettings(interaction.guild.id, { moderation: { ban: banSettings } });
+
+                    await submitted.deferUpdate();
+                    await showBanSettings(submitted, banSettings); // Arayüzü güncelle
+
+                } catch (err) {
+                    // Modal zaman aşımı vs.
+                }
             }
             else if (i.customId === 'set_ban_days') {
-                // Modal Aç (KESİNLİKLE await reloadSettings() YAPMA)
                 const modal = new ModalBuilder()
                     .setCustomId('ban_days_modal')
                     .setTitle('Sıfırlanma Süresi');
@@ -327,56 +370,28 @@ module.exports = {
                 modal.addComponents(row);
 
                 await i.showModal(modal);
+
+                // Modal Submit Bekle
+                try {
+                    const submitted = await i.awaitModalSubmit({
+                        time: 60000,
+                        filter: (m) => m.customId === 'ban_days_modal' && m.user.id === interaction.user.id
+                    });
+
+                    const value = parseInt(submitted.fields.getTextInputValue('days_input'));
+                    if (isNaN(value) || value < 1) {
+                        return submitted.reply({ content: `${emojis.error || '❌'} Lütfen geçerli bir sayı girin.`, ephemeral: true });
+                    }
+
+                    const banSettings = await reloadSettings();
+                    banSettings.resetIntervalDays = value;
+                    await updateGuildSettings(interaction.guild.id, { moderation: { ban: banSettings } });
+
+                    await submitted.deferUpdate();
+                    await showBanSettings(submitted, banSettings);
+
+                } catch (err) { }
             }
         });
-
-        // Modal Collector (Interaction üzerindeki collector sadece componentleri dinler, modalları dinlemez. Modalları ayrı dinleyeceğiz veya global etkileşim eventi kullanacağız ama tek dosya içinde interaction.awaitModalSubmit daha temizdir.)
-        // Ancak awaitModalSubmit sürekli dinlemez, one-off'tur. O yüzden bu yapı yerine event listener kullanmak daha doğru olurdu ama `execute` içinde kalmak istiyoruz.
-        // Düzeltme: Modal submitleri global `interactionCreate` eventinden gelmez bu scope'a.
-        // Ama `awaitModalSubmit` ile bekleyebiliriz button click sonrasında.
-
-        // Modal handling'i collector dışına alıp, collector içinde showModal yaptıktan sonra beklemek concurrency sorunu yaratabilir.
-        // En iyisi global bir modal handler yazmaktır ama tek dosyada çözüm için: Client üzerine listener ekleyip silmek.
-
-        const modalHandler = async (modalInteraction) => {
-            if (modalInteraction.user.id !== interaction.user.id) return;
-            if (!modalInteraction.isModalSubmit()) return;
-            if (modalInteraction.message && modalInteraction.message.id !== message.id) return;
-
-            // Verileri taze çek
-            let banSettings = await reloadSettings();
-
-            if (modalInteraction.customId === 'ban_limit_modal') {
-                const value = parseInt(modalInteraction.fields.getTextInputValue('limit_input'));
-                if (isNaN(value) || value < 1) {
-                    return modalInteraction.reply({ content: 'Lütfen geçerli bir sayı girin.', ephemeral: true });
-                }
-
-                banSettings.limit = value;
-                await updateGuildSettings(interaction.guild.id, { moderation: { ban: banSettings } });
-
-                // Menüyü güncelle
-                await showBanSettings(modalInteraction, banSettings);
-            }
-            if (modalInteraction.customId === 'ban_days_modal') {
-                const value = parseInt(modalInteraction.fields.getTextInputValue('days_input'));
-                if (isNaN(value) || value < 1) {
-                    return modalInteraction.reply({ content: 'Lütfen geçerli bir sayı girin.', ephemeral: true });
-                }
-
-                banSettings.resetIntervalDays = value;
-                await updateGuildSettings(interaction.guild.id, { moderation: { ban: banSettings } });
-
-                await showBanSettings(modalInteraction, banSettings);
-            }
-        };
-
-        interaction.client.on('interactionCreate', modalHandler);
-
-        // Collector bitince listener'ı temizle
-        collector.on('end', () => {
-            interaction.client.off('interactionCreate', modalHandler);
-        });
-
     }
 };

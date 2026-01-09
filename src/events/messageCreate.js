@@ -1,5 +1,7 @@
 const { Events } = require('discord.js');
 const Groq = require('groq-sdk');
+const fs = require('fs');
+const path = require('path');
 
 let groq;
 const cooldowns = new Map();
@@ -9,6 +11,15 @@ module.exports = {
     name: 'messageCreate',
     async execute(message, client) {
         if (message.author.bot) return;
+
+        // Emojiler (Yerel Tanımlama)
+        const emojis = {
+            stop: '🛑',
+            cursing: '<:reva_number:1458961041621909635>',
+            advertisement: '<:reva_number:1458961041621909635>',
+            mute: '🔇',
+            plug: '🔌'
+        };
 
         if (!process.env.GROQ_API_KEY) {
             console.warn("GROQ_API_KEY eksik. Lütfen .env dosyanızı veya ortam değişkenlerinizi kontrol edin.");
@@ -36,7 +47,7 @@ module.exports = {
                 const { EmbedBuilder } = require('discord.js');
                 const errorEmbed = new EmbedBuilder()
                     .setColor('Orange')
-                    .setDescription(`🛑 **${commandName}** adında bir komut bulamadım!\n💡 Komut listesi için **/yardım** yazabilirsin.`);
+                    .setDescription(`${emojis.stop || '🛑'} **${commandName}** adında bir komut bulamadım!\n💡 Komut listesi için **/yardım** yazabilirsin.`);
 
                 // Mesajı gönder ve 5 saniye sonra sil ki sohbet kirlenmesin
                 const msg = await message.reply({ embeds: [errorEmbed] });
@@ -119,7 +130,7 @@ module.exports = {
                         if (badWords.some(word => new RegExp(`(^|\\s)${word}`, 'i').test(contentLower))) {
                             try {
                                 if (message.deletable) await message.delete();
-                                if (badWordsConfig.warningEnabled !== false) await sendWarning("bu sunucuda küfür yasaktır! 🤬");
+                                if (badWordsConfig.warningEnabled !== false) await sendWarning(`bu sunucuda küfür yasaktır! ${emojis.cursing || '🤬'}`);
                                 return;
                             } catch (err) { }
                         }
@@ -140,7 +151,7 @@ module.exports = {
                             if (isBannedLink) {
                                 try {
                                     if (message.deletable) await message.delete();
-                                    if (linksConfig.warningEnabled !== false) await sendWarning("bu sunucuda link paylaşmak yasaktır! (Sadece GIF/Resim serbest) 🔗");
+                                    if (linksConfig.warningEnabled !== false) await sendWarning(`bu sunucuda link paylaşmak yasaktır! (Sadece GIF/Resim serbest) ${emojis.link || '🔗'}`);
                                     return;
                                 } catch (err) { }
                             }
@@ -153,7 +164,7 @@ module.exports = {
                         if (adRegex.test(message.content)) {
                             try {
                                 if (message.deletable) await message.delete();
-                                if (adsConfig.warningEnabled !== false) await sendWarning("bu sunucuda reklam yapmak yasaktır! 📢");
+                                if (adsConfig.warningEnabled !== false) await sendWarning(`bu sunucuda reklam yapmak yasaktır! ${emojis.advertisement || '📢'}`);
                                 return;
                             } catch (err) { }
                         }
@@ -176,7 +187,7 @@ module.exports = {
                                     try {
                                         if (message.deletable) await message.delete();
                                         if (userData.count === LIMIT && spamConfig.warningEnabled !== false) {
-                                            await sendWarning("çok hızlı mesaj gönderiyorsun! Spam yapma! 🔇");
+                                            await sendWarning(`çok hızlı mesaj gönderiyorsun! Spam yapma! ${emojis.mute || '🔇'}`);
                                         }
                                         return;
                                     } catch (err) { }
@@ -418,7 +429,7 @@ Reva: "Öyleyimdir ayıpsın, senin neşen de bol olsun 😉" ||VIBE:Neşeli||
             } catch (error) {
                 console.error("Groq/Firebase Error:", error);
                 // Hata detayını kullanıcıya gösterelim ki sorunu anlayabilelim
-                await message.reply(`Şu an cevap veremiyorum, kısa bir devre yandım sanırım! 🔌\n\`Hata: ${error.message || error}\``);
+                await message.reply(`Şu an cevap veremiyorum, kısa bir devre yandım sanırım! ${emojis.plug || '🔌'}\n\`Hata: ${error.message || error}\``);
             }
         }
     },

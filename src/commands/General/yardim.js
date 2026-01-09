@@ -26,11 +26,20 @@ module.exports = {
         const commandFolders = [...new Set([...slashFolders, ...prefixFolders])];
 
         // Kategori İsimlerini Emojilerle Eşleştir (İsteğe bağlı güzel görünüm için)
+        // Emojiler (Yerel Tanımlama)
+        const emojis = {
+            moderation: '🛡️',
+            general: '✨',
+            fun: '🎮',
+            owner: '👑',
+            folder: '📁'
+        };
+
         const categoryEmojis = {
-            'Moderation': '🛡️',
-            'General': '✨',
-            'Games': '🎮',
-            'Owner': '👑'
+            'Moderation': emojis.moderation,
+            'General': emojis.general,
+            'Games': emojis.fun,
+            'Owner': emojis.owner
         };
 
         const categoryNames = {
@@ -59,7 +68,7 @@ module.exports = {
                     commandFolders.map(folder => ({
                         label: categoryNames[folder] || folder,
                         value: folder,
-                        emoji: categoryEmojis[folder] || '📁',
+                        emoji: categoryEmojis[folder] || emojis.folder || '📁',
                         description: `${folder} kategorisindeki komutları listeler.`
                     }))
                 );
@@ -99,7 +108,7 @@ module.exports = {
                 }
 
                 const embed = new EmbedBuilder()
-                    .setTitle(`${categoryEmojis[selectedCategory] || '📁'} ${categoryNames[selectedCategory] || selectedCategory} Komutları`)
+                    .setTitle(`${categoryEmojis[selectedCategory] || emojis.folder || '📁'} ${categoryNames[selectedCategory] || selectedCategory} Komutları`)
                     .setColor('Blue')
                     .setDescription('Aşağıda bu kategorideki komutlar listelenmiştir.');
 

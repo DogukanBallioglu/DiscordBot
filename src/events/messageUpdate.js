@@ -1,10 +1,16 @@
 const { Events, EmbedBuilder } = require('discord.js');
 const { getGuildSettings } = require('../utils/settingsCache');
+const fs = require('fs');
+const path = require('path');
 
 module.exports = {
     name: Events.MessageUpdate,
     async execute(oldMessage, newMessage) {
         if (!newMessage.guild || newMessage.author?.bot) return;
+
+        const emojis = {
+            note: '📝'
+        };
 
         // İçerik değişmediyse (örn. embed yüklendiyse) işlem yapma
         if (oldMessage.content === newMessage.content) return;
@@ -22,7 +28,7 @@ module.exports = {
             const newContent = newMessage.content ? (newMessage.content.length > 1000 ? newMessage.content.substring(0, 1000) + '...' : newMessage.content) : 'Yok';
 
             const embed = new EmbedBuilder()
-                .setTitle('📝 Mesaj Düzenlendi')
+                .setTitle(`${emojis.note || '📝'} Mesaj Düzenlendi`)
                 .setColor('Yellow')
                 .addFields(
                     { name: 'Mesaj Sahibi', value: `${newMessage.author.tag} (<@${newMessage.author.id}>)`, inline: true },

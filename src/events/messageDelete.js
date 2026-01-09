@@ -1,10 +1,16 @@
 const { Events, EmbedBuilder, AuditLogEvent } = require('discord.js');
 const { getGuildSettings } = require('../utils/settingsCache');
+const fs = require('fs');
+const path = require('path');
 
 module.exports = {
     name: Events.MessageDelete,
     async execute(message) {
         if (!message.guild || message.author?.bot) return;
+
+        const emojis = {
+            trash: '<:reva_trash:1458958507268247764>'
+        };
 
         try {
             const settings = await getGuildSettings(message.guild.id);
@@ -36,7 +42,7 @@ module.exports = {
             const attachments = message.attachments.size > 0 ? message.attachments.map(a => a.proxyURL).join('\n') : 'Yok';
 
             const embed = new EmbedBuilder()
-                .setTitle('🗑️ Bir Mesaj Silindi')
+                .setTitle(`${emojis.trash || '🗑️'} Bir Mesaj Silindi`)
                 .setColor('Red')
                 .addFields(
                     { name: 'Mesaj Sahibi', value: `${message.author.tag} (<@${message.author.id}>)`, inline: true },

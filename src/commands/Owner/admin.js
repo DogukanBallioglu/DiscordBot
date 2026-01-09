@@ -38,6 +38,12 @@ const ActivityTypeReverseMap = {
     5: 'Yarışıyor'
 };
 
+function getEmojiId(emoji) {
+    if (!emoji) return null;
+    const match = emoji.match(/<a?:.+:(\d+)>/);
+    return match ? match[1] : emoji;
+}
+
 module.exports = {
     data: new SlashCommandBuilder()
         .setName('bot-yönetim')
@@ -46,6 +52,35 @@ module.exports = {
     async execute(interaction) {
         try {
             await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+
+            // Emojiler (Yerel Tanımlama)
+            const emojis = {
+                bot: '🤖',
+                profile: '🖼️',
+                settings: '<:reva_settings:1458948250139758723>',
+                online: '<:reva_online:1458877679020544001>',
+                server: '🖥️',
+                avatar: '<:reva_avatar:1458959681832616009>',
+                banner: '<:reva_banner:1458959854227034274>',
+                folder: '📁',
+                dnd: '<:reva_dnd:1458877671281922152>',
+                idle: '<:reva_idle:1458877685877964872>',
+                offline: '<:reva_offline:1458877691729281088>',
+                note: '📝',
+                add: '<:reva_add:1458954045082566778>',
+                edit: '<:reva_edit:1458958102098608301>',
+                fun: '🎮',
+                watching: '📺',
+                listening: '🎧',
+                competing: '🏆',
+                trash: '<:reva_trash:1458958507268247764>',
+                back: '<:reva_back:1458957137278406824>',
+                success: '<:reva_yes:1458949796806000771>',
+                error: '<:reva_no:1458949780809191695>',
+                search: '🔎',
+                command_on: '<a:reva_command_on:1458854900556501182>',
+                command_off: '<:reva_command_off:1458854966738424098>'
+            };
 
             if (interaction.user.id !== process.env.OWNER_ID) {
                 return interaction.editReply({ content: 'Bu komutu kullanmak için yetkiniz yok.' });
@@ -59,7 +94,7 @@ module.exports = {
             // 1. Ana Menü
             const getMainMenu = () => {
                 const embed = new EmbedBuilder()
-                    .setTitle('🤖 Bot Yönetim Paneli')
+                    .setTitle(`${emojis.bot || '🤖'} Bot Yönetim Paneli`)
                     .setDescription('Lütfen yapmak istediğiniz işlemi seçin.')
                     .setColor('Blurple')
                     .setThumbnail(interaction.client.user.displayAvatarURL());
@@ -70,10 +105,10 @@ module.exports = {
                             .setCustomId('main_menu_select')
                             .setPlaceholder('Bir işlem seçin...')
                             .addOptions([
-                                { label: 'Profil Ayarları', value: 'profile_settings', emoji: '🖼️' },
-                                { label: 'Komut Ayarları', value: 'command_settings', emoji: '⚙️' },
-                                { label: 'Durum Yönetimi', value: 'status_settings', emoji: '🟢' },
-                                { label: 'Sunucu Yönetimi', value: 'server_settings', emoji: '🖥️' }
+                                { label: 'Profil Ayarları', value: 'profile_settings', emoji: getEmojiId(emojis.profile || '🖼️') },
+                                { label: 'Komut Ayarları', value: 'command_settings', emoji: getEmojiId(emojis.settings || '⚙️') },
+                                { label: 'Durum Yönetimi', value: 'status_settings', emoji: getEmojiId(emojis.online || '🟢') },
+                                { label: 'Sunucu Yönetimi', value: 'server_settings', emoji: getEmojiId(emojis.server || '🖥️') }
                             ])
                     );
                 return { embeds: [embed], components: [row] };
@@ -82,7 +117,7 @@ module.exports = {
             // 2. Profil Ayarları
             const getProfileSettings = () => {
                 const embed = new EmbedBuilder()
-                    .setTitle('🖼️ Profil Ayarları')
+                    .setTitle(`${emojis.profile || '🖼️'} Profil Ayarları`)
                     .setColor('Orange')
                     .addFields(
                         { name: 'Mevcut Avatar', value: '[Link](' + (interaction.client.user.avatarURL() || '') + ')', inline: true },
@@ -91,20 +126,20 @@ module.exports = {
 
                 const row = new ActionRowBuilder()
                     .addComponents(
-                        new ButtonBuilder().setCustomId('btn_change_avatar').setLabel('Avatar Değiştir').setStyle(ButtonStyle.Primary).setEmoji('👤'),
-                        new ButtonBuilder().setCustomId('btn_change_banner').setLabel('Banner Değiştir').setStyle(ButtonStyle.Primary).setEmoji('🏳️'),
-                        new ButtonBuilder().setCustomId('back_to_main').setLabel('Geri Dön').setStyle(ButtonStyle.Secondary).setEmoji('⬅️')
+                        new ButtonBuilder().setCustomId('btn_change_avatar').setLabel('Avatar Değiştir').setStyle(ButtonStyle.Primary).setEmoji(getEmojiId(emojis.avatar || '👤')),
+                        new ButtonBuilder().setCustomId('btn_change_banner').setLabel('Banner Değiştir').setStyle(ButtonStyle.Primary).setEmoji(getEmojiId(emojis.banner || '🏳️')),
+                        new ButtonBuilder().setCustomId('back_to_main').setLabel('Geri Dön').setStyle(ButtonStyle.Secondary).setEmoji(getEmojiId(emojis.back || '⬅️'))
                     );
                 return { embeds: [embed], components: [row] };
             };
 
             // 3. Command Settings
             const getCommandSettings = () => {
-                const embed = new EmbedBuilder().setTitle('⚙️ Komut Ayarları').setDescription('Kategori seçin.').setColor('Blue');
+                const embed = new EmbedBuilder().setTitle(`${emojis.settings || '⚙️'} Komut Ayarları`).setDescription('Kategori seçin.').setColor('Blue');
                 const menu = new ActionRowBuilder().addComponents(
-                    new StringSelectMenuBuilder().setCustomId('select_category').setPlaceholder('Kategori Seç...').addOptions(categories.map(c => ({ label: c, value: c, emoji: '📁' })))
+                    new StringSelectMenuBuilder().setCustomId('select_category').setPlaceholder('Kategori Seç...').addOptions(categories.map(c => ({ label: c, value: c, emoji: getEmojiId(emojis.folder || '📁') })))
                 );
-                const back = new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId('back_to_main').setLabel('Ana Menüye Dön').setStyle(ButtonStyle.Secondary).setEmoji('⬅️'));
+                const back = new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId('back_to_main').setLabel('Ana Menüye Dön').setStyle(ButtonStyle.Secondary).setEmoji(getEmojiId(emojis.back || '⬅️')));
                 return { embeds: [embed], components: [menu, back] };
             };
 
@@ -118,7 +153,7 @@ module.exports = {
                 if (!activityList) activityList = 'Hiç aktivite yok.';
 
                 const embed = new EmbedBuilder()
-                    .setTitle('🟢 Durum Yönetimi')
+                    .setTitle(`${emojis.online || '🟢'} Durum Yönetimi`)
                     .setDescription(`**Görünürlük Durumu:** ${currentStatus.toUpperCase()}\n\n**Aktif Döngüdeki Durumlar:**\n${activityList}`)
                     .setColor('Green')
                     .setFooter({ text: 'Not: Durumlar her 10 saniyede bir değişir.' });
@@ -129,10 +164,10 @@ module.exports = {
                         .setCustomId('select_bot_status')
                         .setPlaceholder('Görünürlük Durumu (Online/DND...)')
                         .addOptions([
-                            { label: 'Çevrimiçi', value: 'online', emoji: '🟢', default: currentStatus === 'online' },
-                            { label: 'Rahatsız Etmeyin', value: 'dnd', emoji: '🔴', default: currentStatus === 'dnd' },
-                            { label: 'Boşta', value: 'idle', emoji: '🌙', default: currentStatus === 'idle' },
-                            { label: 'Görünmez', value: 'invisible', emoji: '👻', default: currentStatus === 'invisible' },
+                            { label: 'Çevrimiçi', value: 'online', emoji: getEmojiId(emojis.online || '🟢'), default: currentStatus === 'online' },
+                            { label: 'Rahatsız Etmeyin', value: 'dnd', emoji: getEmojiId(emojis.dnd || '🔴'), default: currentStatus === 'dnd' },
+                            { label: 'Boşta', value: 'idle', emoji: getEmojiId(emojis.idle || '🌙'), default: currentStatus === 'idle' },
+                            { label: 'Görünmez', value: 'invisible', emoji: getEmojiId(emojis.offline || '👻'), default: currentStatus === 'invisible' },
                         ])
                 );
 
@@ -142,7 +177,7 @@ module.exports = {
                     const options = activities.map((a, i) => ({
                         label: `${ActivityTypeReverseMap[a.type] || 'Type ' + a.type}: ${a.text}`.substring(0, 100),
                         value: i.toString(),
-                        emoji: '📝'
+                        emoji: getEmojiId(emojis.note || '📝')
                     })).slice(0, 25);
 
                     editRow = new ActionRowBuilder().addComponents(
@@ -155,8 +190,8 @@ module.exports = {
 
                 // Row 3: Buttons
                 const btnRow = new ActionRowBuilder().addComponents(
-                    new ButtonBuilder().setCustomId('btn_add_activity').setLabel('Aktivite Ekle').setStyle(ButtonStyle.Success).setEmoji('➕'),
-                    new ButtonBuilder().setCustomId('back_to_main').setLabel('Geri Dön').setStyle(ButtonStyle.Secondary).setEmoji('⬅️')
+                    new ButtonBuilder().setCustomId('btn_add_activity').setLabel('Aktivite Ekle').setStyle(ButtonStyle.Success).setEmoji(getEmojiId(emojis.add || '➕')),
+                    new ButtonBuilder().setCustomId('back_to_main').setLabel('Geri Dön').setStyle(ButtonStyle.Secondary).setEmoji(getEmojiId(emojis.back || '⬅️'))
                 );
 
                 const components = [statusRow];
@@ -176,13 +211,13 @@ module.exports = {
                 }
 
                 const embed = new EmbedBuilder()
-                    .setTitle('📝 Aktivite Düzenle')
+                    .setTitle(`${emojis.note || '📝'} Aktivite Düzenle`)
                     .setDescription(`**Metin:** ${activity.text}\n**Tip:** ${ActivityTypeReverseMap[activity.type]}`)
                     .setColor('Yellow');
 
                 // Row 1: Edit Text Button
                 const btnRow1 = new ActionRowBuilder().addComponents(
-                    new ButtonBuilder().setCustomId(`btn_edit_text_${index}`).setLabel('Metni Düzenle').setStyle(ButtonStyle.Primary).setEmoji('✏️')
+                    new ButtonBuilder().setCustomId(`btn_edit_text_${index}`).setLabel('Metni Düzenle').setStyle(ButtonStyle.Primary).setEmoji(getEmojiId(emojis.edit || '✏️'))
                 );
 
                 // Row 2: Select Type
@@ -191,17 +226,17 @@ module.exports = {
                         .setCustomId(`select_edit_type_${index}`)
                         .setPlaceholder('Tipi Değiştir...')
                         .addOptions([
-                            { label: 'Oynuyor', value: '0', emoji: '🎮', default: activity.type === 0 },
-                            { label: 'İzliyor', value: '3', emoji: '📺', default: activity.type === 3 },
-                            { label: 'Dinliyor', value: '2', emoji: '🎧', default: activity.type === 2 },
-                            { label: 'Yarışıyor', value: '5', emoji: '🏆', default: activity.type === 5 },
+                            { label: 'Oynuyor', value: '0', emoji: getEmojiId(emojis.fun || '🎮'), default: activity.type === 0 },
+                            { label: 'İzliyor', value: '3', emoji: getEmojiId(emojis.watching || '📺'), default: activity.type === 3 },
+                            { label: 'Dinliyor', value: '2', emoji: getEmojiId(emojis.listening || '🎧'), default: activity.type === 2 },
+                            { label: 'Yarışıyor', value: '5', emoji: getEmojiId(emojis.competing || '🏆'), default: activity.type === 5 },
                         ])
                 );
 
                 // Row 3: Delete & Back
                 const btnRow2 = new ActionRowBuilder().addComponents(
-                    new ButtonBuilder().setCustomId(`btn_delete_activity_${index}`).setLabel('Bu Aktiviteyi Sil').setStyle(ButtonStyle.Danger).setEmoji('🗑️'),
-                    new ButtonBuilder().setCustomId('back_to_status').setLabel('Geri Dön').setStyle(ButtonStyle.Secondary).setEmoji('⬅️')
+                    new ButtonBuilder().setCustomId(`btn_delete_activity_${index}`).setLabel('Bu Aktiviteyi Sil').setStyle(ButtonStyle.Danger).setEmoji(getEmojiId(emojis.trash || '🗑️')),
+                    new ButtonBuilder().setCustomId('back_to_status').setLabel('Geri Dön').setStyle(ButtonStyle.Secondary).setEmoji(getEmojiId(emojis.back || '⬅️'))
                 );
 
                 return { embeds: [embed], components: [btnRow1, typeRow, btnRow2] };
@@ -212,7 +247,7 @@ module.exports = {
                 const guilds = interaction.client.guilds.cache.map(g => ({ label: g.name.substring(0, 100), value: g.id, description: `${g.memberCount} üye` })).slice(0, 25);
 
                 const embed = new EmbedBuilder()
-                    .setTitle('🖥️ Sunucu Yönetimi')
+                    .setTitle(`${emojis.server || '🖥️'} Sunucu Yönetimi`)
                     .setDescription(`Bot şu an **${interaction.client.guilds.cache.size}** sunucuda bulunuyor.\nİşlem yapmak istediğiniz sunucuyu seçin.`)
                     .setColor('Purple');
 
@@ -224,7 +259,7 @@ module.exports = {
                 );
 
                 const back = new ActionRowBuilder().addComponents(
-                    new ButtonBuilder().setCustomId('back_to_main').setLabel('Ana Menüye Dön').setStyle(ButtonStyle.Secondary).setEmoji('⬅️')
+                    new ButtonBuilder().setCustomId('back_to_main').setLabel('Ana Menüye Dön').setStyle(ButtonStyle.Secondary).setEmoji(getEmojiId(emojis.back || '⬅️'))
                 );
 
                 return { embeds: [embed], components: [menu, back] };
@@ -233,7 +268,7 @@ module.exports = {
             // 7. Server Detail View
             const getServerDetailView = async (guildId) => {
                 const guild = interaction.client.guilds.cache.get(guildId);
-                if (!guild) return { content: 'Sunucu bulunamadı (Bot ayrılmış olabilir).', components: [new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId('back_to_servers').setLabel('Geri Dön').setStyle(ButtonStyle.Secondary))] };
+                if (!guild) return { content: 'Sunucu bulunamadı (Bot ayrılmış olabilir).', components: [new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId('back_to_servers').setLabel('Geri Dön').setStyle(ButtonStyle.Secondary).setEmoji(getEmojiId(emojis.back || '⬅️')))] };
 
                 await guild.fetch();
                 const owner = await interaction.client.users.fetch(guild.ownerId).catch(() => null);
@@ -244,7 +279,7 @@ module.exports = {
                 const hasData = docGuild.exists || docSettings.exists;
 
                 const embed = new EmbedBuilder()
-                    .setTitle(`🔎 Sunucu Detayı: ${guild.name}`)
+                    .setTitle(`${emojis.search || '🔎'} Sunucu Detayı: ${guild.name}`)
                     .setThumbnail(guild.iconURL())
                     .setColor('DarkVividPink')
                     .addFields(
@@ -253,7 +288,7 @@ module.exports = {
                         { name: 'Sahibi', value: owner ? `${owner.tag} (${owner.id})` : 'Bilinmiyor', inline: true },
                         { name: 'Oluşturulma', value: `<t:${Math.floor(guild.createdTimestamp / 1000)}:R>`, inline: true },
                         { name: 'Bot Katılma', value: `<t:${Math.floor(guild.joinedTimestamp / 1000)}:R>`, inline: true },
-                        { name: 'Veritabanı Durumu', value: hasData ? '✅ Veri Var' : '❌ Veri Yok', inline: true }
+                        { name: 'Veritabanı Durumu', value: hasData ? `${emojis.success || '✅'} Veri Var` : `${emojis.error || '❌'} Veri Yok`, inline: true }
                     );
 
                 const row = new ActionRowBuilder().addComponents(
@@ -262,9 +297,9 @@ module.exports = {
                         .setCustomId(`btn_delete_data_${guild.id}`)
                         .setLabel(hasData ? 'Verileri Sil (DB)' : 'Veri Bulunamadı')
                         .setStyle(ButtonStyle.Danger)
-                        .setEmoji('🗑️')
+                        .setEmoji(getEmojiId(emojis.trash || '🗑️'))
                         .setDisabled(!hasData),
-                    new ButtonBuilder().setCustomId('back_to_servers').setLabel('Geri Dön').setStyle(ButtonStyle.Secondary).setEmoji('⬅️')
+                    new ButtonBuilder().setCustomId('back_to_servers').setLabel('Geri Dön').setStyle(ButtonStyle.Secondary).setEmoji(getEmojiId(emojis.back || '⬅️'))
                 );
 
                 return { embeds: [embed], components: [row] };
@@ -272,11 +307,16 @@ module.exports = {
 
             const reply = await interaction.editReply({ ...getMainMenu() });
 
-            const collector = reply.createMessageComponentCollector({ time: 300000 }); // 5 mins
+            // STRICT FILTER: Only allow interactions for THIS specific message
+            const filter = (i) => i.user.id === interaction.user.id && i.message.id === reply.id;
+            const collector = reply.createMessageComponentCollector({ filter, time: 300000 }); // 5 mins
 
             let currentCategory = null;
 
             collector.on('collect', async i => {
+                // Double check (redundant but safe)
+                if (i.message.id !== reply.id) return;
+
                 // General Validations
                 if (i.user.id !== interaction.user.id) return i.reply({ content: 'Sadece komutu kullanan kişi işlem yapabilir.', flags: MessageFlags.Ephemeral });
 
@@ -323,6 +363,9 @@ module.exports = {
                     await updateToCommandList(i, currentCategory);
                 }
                 else if (i.customId === 'select_command') {
+                    // Do not defer here immediately if toggleCommandStatus also does UI updates that might conflict
+                    // But to prevent "Unknown interaction", we MUST defer if the operation takes time.
+                    // The issue is likely race conditions.
                     await toggleCommandStatus(i, i.values[0]);
                 }
 
@@ -509,7 +552,7 @@ module.exports = {
                     return {
                         label: `${cmdName} (${mapStatus ? 'Açık' : 'Kapalı'})`,
                         value: cmdName,
-                        emoji: mapStatus ? '🟢' : '🔴'
+                        emoji: mapStatus ? getEmojiId(emojis.command_on || '🟩') : getEmojiId(emojis.command_off || '🟥')
                     };
                 });
 
@@ -522,10 +565,14 @@ module.exports = {
                     new StringSelectMenuBuilder().setCustomId('select_command').setPlaceholder('Komut Seç...').addOptions(options)
                 );
                 const back = new ActionRowBuilder().addComponents(
-                    new ButtonBuilder().setCustomId('back_to_categories').setLabel('Kategori Listesine Dön').setStyle(ButtonStyle.Secondary).setEmoji('⬅️')
+                    new ButtonBuilder().setCustomId('back_to_categories').setLabel('Kategori Listesine Dön').setStyle(ButtonStyle.Secondary).setEmoji(getEmojiId(emojis.back || '⬅️'))
                 );
 
-                await i.update({ embeds: [embed], components: [menu, back] });
+                if (!i.deferred && !i.replied) {
+                    await i.update({ embeds: [embed], components: [menu, back] });
+                } else {
+                    await i.editReply({ embeds: [embed], components: [menu, back] });
+                }
             }
 
             async function toggleCommandStatus(i, cmdName) {
